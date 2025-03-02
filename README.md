@@ -1,2 +1,1 @@
-# hstar-z3
-Synthesizing nondeterministic lambda calculus programs in Z3
+# Synthesizing nondeterministic λ-calculus programs in Z3
