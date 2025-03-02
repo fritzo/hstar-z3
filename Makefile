@@ -1,20 +1,26 @@
-.PHONY: FORCE install lint format test clean
+.PHONY: all
+all: lint
 
+.PHONY: install
 install: FORCE
 	pip install -e ".[dev]"
 
+.PHONY: lint
 lint: FORCE
 	ruff check .
 	black --check .
-	mypy .
+	mypy --install-types --non-interactive .
 
+.PHONY: format
 format: FORCE
 	ruff check --fix .
 	black .
 
-test: FORCE
+.PHONY: test
+test: lint FORCE
 	pytest -v test/
 
+.PHONY: clean
 clean:
 	rm -rf build/
 	rm -rf dist/
@@ -29,4 +35,5 @@ clean:
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 
 	
+.PHONY: FORCE
 FORCE:
