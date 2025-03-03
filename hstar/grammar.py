@@ -16,11 +16,11 @@ from .util import HashConsMeta, intern
 
 
 class TermType(Enum):
-    TOP = 0  # By contrast BOT is simply a nullary JOIN.
+    TOP = 0  # by contrast BOT is simply a nullary JOIN
     APP = 1
-    K = 2  # TODO rename to CON?
-    LIN = 3
-    ABS = 4
+    ABS0 = 2  # zero occurrences of the bound variable
+    ABS1 = 3  # one occurrence of the bound variable
+    ABS = 4  # two or more occurrences of the bound variable
     VAR = 5
 
 
@@ -80,9 +80,9 @@ def _APP(a: Term, b: JoinTerm) -> JoinTerm:
     # Eagerly linearly reduce.
     if a is _TOP:
         return TOP
-    if a.typ == TermType.K:
+    if a.typ == TermType.ABS0:
         return a.head
-    if a.typ == TermType.LIN:
+    if a.typ == TermType.ABS1:
         return subst(a.head, 0, b)
     # Construct.
     return Term(
@@ -99,24 +99,24 @@ def APP(a: JoinTerm, b: JoinTerm) -> JoinTerm:
     return JOIN(*(_APP(ai, b) for ai in a.args))
 
 
-def _K(a: Term) -> Term:
+def _ABS0(a: Term) -> Term:
     """Constant function."""
     assert a.typ != TermType.TOP, "use LAM instead"
     # Construct.
     return Term(
-        TermType.K,
+        TermType.ABS0,
         head=a,
         free_vars=a.free_vars,
     )
 
 
 @cache
-def _LIN(a: Term) -> Term:
+def _ABS1(a: Term) -> Term:
     """Linear function."""
     assert a.typ != TermType.TOP, "use LAM instead"
     assert a.free_vars.get(0, 0) == 1, "use LAM instead"
     # Construct.
-    return Term(TermType.LIN, head=a, free_vars=a.free_vars)
+    return Term(TermType.ABS1, head=a, free_vars=a.free_vars)
 
 
 @cache
@@ -133,9 +133,9 @@ def _LAM(a: Term) -> Term:
     """Lambda abstraction."""
     occurrences = a.free_vars.get(0, 0)
     if occurrences == 0:
-        return _K(a)
+        return _ABS0(a)
     if occurrences == 1:
-        return _LIN(a)
+        return _ABS1(a)
     return _ABS(a)
 
 
@@ -186,10 +186,10 @@ def shift(a: Term, min_var: int = 0) -> Term:
         head = shift(a.head, min_var)
         body = JOIN(*(shift(ai, min_var) for ai in a.body.args))
         return _APP(head, body)
-    if a.typ == TermType.K:
-        return _K(shift(a.head, min_var))
-    if a.typ == TermType.LIN:
-        return _LIN(shift(a.head, min_var + 1))
+    if a.typ == TermType.ABS0:
+        return _ABS0(shift(a.head, min_var))
+    if a.typ == TermType.ABS1:
+        return _ABS1(shift(a.head, min_var + 1))
     if a.typ == TermType.ABS:
         return _ABS(shift(a.head, min_var + 1))
     raise ValueError(f"unexpected term type: {a.typ}")
@@ -207,9 +207,9 @@ def subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
         head = subst(a.head, v, b)
         body = JOIN(*(subst(ai, v, b) for ai in a.body.args))
         return APP(head, body)
-    if a.typ == TermType.K:
-        return _K(subst(a.head, v, b))
-    if a.typ in (TermType.LIN, TermType.ABS):
+    if a.typ == TermType.ABS0:
+        return _ABS0(subst(a.head, v, b))
+    if a.typ in (TermType.ABS1, TermType.ABS):
         b = shift(b)  # FIXME is min_var correct?
         return _LAM(subst(a.head, v, b))
     raise ValueError(f"unexpected term type: {a.typ}")
