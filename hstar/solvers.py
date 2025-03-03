@@ -62,14 +62,12 @@ TYPE = z3.Const("TYPE", Term)
 SIMPLE = z3.Const("SIMPLE", Term)
 
 
-def shift(term: z3.ExprRef, starting_at: int = 0) -> z3.ExprRef:
+def shift(term: z3.ExprRef, start: int = 0) -> z3.ExprRef:
     """
-    Increment free variables in a term, starting from index starting_at.
+    Increment free variables in a term, starting from index `start`.
     Eagerly applies shifting rules for Term expressions when possible,
     otherwise returns an unevaluated SHIFT call.
     """
-    start = z3.IntVal(starting_at)
-
     # Handle special constants first
     if term == TOP:
         return TOP
@@ -79,7 +77,7 @@ def shift(term: z3.ExprRef, starting_at: int = 0) -> z3.ExprRef:
     # Check if we have a symbolic variable (like a, x, etc.)
     if z3.is_const(term) and term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
         # This is a symbolic variable, just return unevaluated SHIFT
-        return SHIFT(term, start)
+        return SHIFT(term, z3.IntVal(start))
 
     try:
         # Use Z3's application inspection functions directly
@@ -90,36 +88,36 @@ def shift(term: z3.ExprRef, starting_at: int = 0) -> z3.ExprRef:
             if decl_name == "VAR":
                 # Handle VAR constructor
                 idx = term.arg(0).as_long()  # Get the index directly
-                if idx >= starting_at:
+                if idx >= start:
                     return VAR(idx + 1)
                 else:
                     return term
             elif decl_name == "ABS":
                 # Handle ABS constructor
                 body = term.arg(0)
-                return ABS(shift(body, starting_at + 1))
+                return ABS(shift(body, start + 1))
             elif decl_name == "APP":
                 # Handle APP constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return APP(shift(lhs, starting_at), shift(rhs, starting_at))
+                return APP(shift(lhs, start), shift(rhs, start))
             elif decl_name == "JOIN":
                 # Handle JOIN constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return JOIN(shift(lhs, starting_at), shift(rhs, starting_at))
+                return JOIN(shift(lhs, start), shift(rhs, start))
             elif decl_name == "COMP":
                 # Handle COMP constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return COMP(shift(lhs, starting_at), shift(rhs, starting_at))
+                return COMP(shift(lhs, start), shift(rhs, start))
     except Exception as e:
         # If we encounter any exception, log it and return unevaluated SHIFT
         print(f"Exception in shift: {e}")
         pass
 
     # Fall back to unevaluated SHIFT for any other expressions
-    return SHIFT(term, start)
+    return SHIFT(term, z3.IntVal(start))
 
 
 def join(*args: z3.ExprRef) -> z3.ExprRef:

@@ -81,6 +81,7 @@ def _APP(a: Term, b: JoinTerm) -> JoinTerm:
     if a is _TOP:
         return TOP
     if a.typ == TermType.ABS0:
+        assert a.head is not None
         return a.head
     if a.typ == TermType.ABS1:
         return subst(a.head, 0, b)
@@ -175,23 +176,24 @@ def max_vars(*args: Map[int, int]) -> Map[int, int]:
 
 
 @cache
-def shift(a: Term, min_var: int = 0) -> Term:
+def shift(a: Term, start: int = 0) -> Term:
     """Increment all free VARs in a."""
-    if all(v < min_var for v in a.free_vars):
+    if all(v < start for v in a.free_vars):
         return a
     if a.typ == TermType.VAR:
-        assert a.varname >= min_var
+        assert a.varname >= start
         return Term(TermType.VAR, varname=a.varname + 1)
     if a.typ == TermType.APP:
-        head = shift(a.head, min_var)
-        body = JOIN(*(shift(ai, min_var) for ai in a.body.args))
+        assert a.head is not None
+        head = shift(a.head, start)
+        body = JOIN(*(shift(ai, start) for ai in a.body.args))
         return _APP(head, body)
     if a.typ == TermType.ABS0:
-        return _ABS0(shift(a.head, min_var))
+        return _ABS0(shift(a.head, start))
     if a.typ == TermType.ABS1:
-        return _ABS1(shift(a.head, min_var + 1))
+        return _ABS1(shift(a.head, start + 1))
     if a.typ == TermType.ABS:
-        return _ABS(shift(a.head, min_var + 1))
+        return _ABS(shift(a.head, start + 1))
     raise ValueError(f"unexpected term type: {a.typ}")
 
 
@@ -210,6 +212,6 @@ def subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
     if a.typ == TermType.ABS0:
         return _ABS0(subst(a.head, v, b))
     if a.typ in (TermType.ABS1, TermType.ABS):
-        b = shift(b)  # FIXME is min_var correct?
+        b = shift(b)  # FIXME is start correct?
         return _LAM(subst(a.head, v, b))
     raise ValueError(f"unexpected term type: {a.typ}")
