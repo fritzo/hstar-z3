@@ -130,22 +130,22 @@ def test_lam_operation():
     """Test that the LAM operation works correctly with hash consing."""
     # Test basic lambda abstraction
     lam0 = LAM(JOIN(VAR(0)))  # \x.x
-    assert lam0.args == frozenset(
+    assert lam0.parts == frozenset(
         [Term(TermType.ABS1, head=Term(TermType.VAR, varname=0, free_vars={"0": 1}))]
     )
 
     # Test that LAM correctly identifies different cases (ABS0, ABS1, ABS)
     # ABS0 - zero occurrences
     lam_constant = LAM(JOIN(VAR(1)))  # \x.y
-    assert list(lam_constant.args)[0].typ == TermType.ABS0
+    assert list(lam_constant.parts)[0].typ == TermType.ABS0
 
     # ABS1 - one occurrence
     lam_linear = LAM(JOIN(VAR(0)))  # \x.x
-    assert list(lam_linear.args)[0].typ == TermType.ABS1
+    assert list(lam_linear.parts)[0].typ == TermType.ABS1
 
     # ABS - two or more occurrences
     lam_nonlinear = LAM(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
-    assert list(lam_nonlinear.args)[0].typ == TermType.ABS
+    assert list(lam_nonlinear.parts)[0].typ == TermType.ABS
 
     # Test that LAM is idempotent with hash consing
     assert LAM(JOIN(VAR(0))) is LAM(JOIN(VAR(0)))

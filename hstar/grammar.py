@@ -14,6 +14,8 @@ from immutables import Map
 
 from .util import HashConsMeta, intern
 
+EMPTY_VARS: Map[int, int] = Map()
+
 
 class TermType(Enum):
     TOP = 0  # by contrast BOT is simply a nullary JOIN
@@ -24,9 +26,6 @@ class TermType(Enum):
     VAR = 5
 
 
-EMPTY_VARS: Map[int, int] = Map()
-
-
 @dataclass(frozen=True, slots=True)
 class Term(metaclass=HashConsMeta):
     """Linear normal form."""
@@ -34,7 +33,7 @@ class Term(metaclass=HashConsMeta):
     # Data.
     typ: TermType
     varname: int = 0  # For VAR.
-    head: "JoinTerm | None" = None
+    head: "Term | None" = None
     body: "JoinTerm | None" = None
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
@@ -45,7 +44,7 @@ class JoinTerm(metaclass=HashConsMeta):
     """Join of terms in the Scott lattice."""
 
     # Data.
-    args: frozenset[Term]
+    parts: frozenset[Term]
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
@@ -82,22 +81,27 @@ def _APP(a: Term, b: JoinTerm) -> JoinTerm:
         return TOP
     if a.typ == TermType.ABS0:
         assert a.head is not None
-        return a.head
+        return JOIN(a.head)
     if a.typ == TermType.ABS1:
+        assert a.head is not None
         return subst(a.head, 0, b)
     # Construct.
-    return Term(
+    arg = Term(
         TermType.APP,
         head=a,
         body=b,
         free_vars=add_vars(a.free_vars, b.free_vars),
     )
+    return JOIN(arg)
 
 
 @cache
 def APP(a: JoinTerm, b: JoinTerm) -> JoinTerm:
     """Application."""
-    return JOIN(*(_APP(ai, b) for ai in a.args))
+    args: list[Term] = []
+    for ai in a.parts:
+        args.extend(_APP(ai, b).parts)
+    return JOIN(*args)
 
 
 def _ABS0(a: Term) -> Term:
@@ -146,7 +150,7 @@ def LAM(a: JoinTerm) -> JoinTerm:
     if a is TOP:
         return TOP
     # Construct.
-    return _LAM(frozenset(_LAM(ai) for ai in a.args))
+    return JOIN(*(_LAM(ai) for ai in a.parts))
 
 
 @cache
@@ -185,14 +189,20 @@ def shift(a: Term, start: int = 0) -> Term:
         return Term(TermType.VAR, varname=a.varname + 1)
     if a.typ == TermType.APP:
         assert a.head is not None
+        assert a.body is not None
         head = shift(a.head, start)
-        body = JOIN(*(shift(ai, start) for ai in a.body.args))
-        return _APP(head, body)
+        body = JOIN(*(shift(ai, start) for ai in a.body.parts))
+        parts = _APP(head, body).parts
+        assert len(parts) == 1
+        return next(iter(parts))
     if a.typ == TermType.ABS0:
+        assert a.head is not None
         return _ABS0(shift(a.head, start))
     if a.typ == TermType.ABS1:
+        assert a.head is not None
         return _ABS1(shift(a.head, start + 1))
     if a.typ == TermType.ABS:
+        assert a.head is not None
         return _ABS(shift(a.head, start + 1))
     raise ValueError(f"unexpected term type: {a.typ}")
 
@@ -200,18 +210,33 @@ def shift(a: Term, start: int = 0) -> Term:
 @cache
 def subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a."""
+    body_parts: list[Term]
     if a.free_vars.get(v, 0) == 0:
-        return a
+        return JOIN(a)
     if a.typ == TermType.VAR:
         assert a.varname == v
         return b
     if a.typ == TermType.APP:
+        assert a.head is not None
+        assert a.body is not None
         head = subst(a.head, v, b)
-        body = JOIN(*(subst(ai, v, b) for ai in a.body.args))
+        body_parts = []
+        for ai in a.body.parts:
+            body_parts.extend(subst(ai, v, b).parts)
+        body = JOIN(*body_parts)
         return APP(head, body)
     if a.typ == TermType.ABS0:
-        return _ABS0(subst(a.head, v, b))
+        assert a.head is not None
+        body_parts = []
+        for ai in b.parts:
+            for part in subst(a.head, v, ai).parts:
+                body_parts.append(_ABS0(part))
+        return JOIN(*body_parts)
     if a.typ in (TermType.ABS1, TermType.ABS):
-        b = shift(b)  # FIXME is start correct?
-        return _LAM(subst(a.head, v, b))
+        b = JOIN(*(shift(bi) for bi in b.parts))  # FIXME is start correct?
+        body_parts = []
+        for ai in b.parts:
+            for part in subst(a.head, v + 1, ai).parts:
+                body_parts.append(_LAM(part))
+        return JOIN(*body_parts)
     raise ValueError(f"unexpected term type: {a.typ}")
