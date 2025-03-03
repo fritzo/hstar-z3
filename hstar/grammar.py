@@ -131,7 +131,7 @@ def _APP(a: Term, b: JoinTerm) -> JoinTerm:
         return _JOIN(a.head)
     if a.typ == TermType.ABS1:
         assert a.head is not None
-        return subst(a.head, 0, b)
+        return _subst(a.head, 0, b)
     # Construct.
     arg = Term(
         TermType.APP,
@@ -208,35 +208,37 @@ def VAR(v: int) -> JoinTerm:
 
 
 @cache
-def shift(a: Term, start: int = 0) -> Term:
+def _shift(a: Term, start: int = 0) -> Term:
     """Increment all free VARs in a."""
     if all(v < start for v in a.free_vars):
         return a
     if a.typ == TermType.VAR:
         assert a.varname >= start
-        return Term(TermType.VAR, varname=a.varname + 1)
+        return Term(
+            TermType.VAR, varname=a.varname + 1, free_vars=Map({a.varname + 1: 1})
+        )
     if a.typ == TermType.APP:
         assert a.head is not None
         assert a.body is not None
-        head = shift(a.head, start)
-        body = _JOIN(*(shift(ai, start) for ai in a.body.parts))
+        head = _shift(a.head, start)
+        body = JOIN(*(_subst(ai, 0, VAR(start)) for ai in a.body.parts))
         parts = _APP(head, body).parts
         assert len(parts) == 1
         return next(iter(parts))
     if a.typ == TermType.ABS0:
         assert a.head is not None
-        return _ABS0(shift(a.head, start))
+        return _ABS0(_shift(a.head, start))
     if a.typ == TermType.ABS1:
         assert a.head is not None
-        return _ABS1(shift(a.head, start + 1))
+        return _ABS1(_shift(a.head, start + 1))
     if a.typ == TermType.ABS:
         assert a.head is not None
-        return _ABS(shift(a.head, start + 1))
+        return _ABS(_shift(a.head, start + 1))
     raise ValueError(f"unexpected term type: {a.typ}")
 
 
 @cache
-def subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
+def _subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a."""
     body_parts: list[Term]
     if a.free_vars.get(v, 0) == 0:
@@ -247,21 +249,33 @@ def subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
     if a.typ == TermType.APP:
         assert a.head is not None
         assert a.body is not None
-        head = subst(a.head, v, b)
-        body = JOIN(*(subst(ai, v, b) for ai in a.body.parts))
+        head = _subst(a.head, v, b)
+        body = JOIN(*(_subst(ai, v, b) for ai in a.body.parts))
         return APP(head, body)
     if a.typ == TermType.ABS0:
         assert a.head is not None
         body_parts = []
         for ai in b.parts:
-            for part in subst(a.head, v, ai).parts:
+            for part in _subst(a.head, v, _JOIN(ai)).parts:
                 body_parts.append(_ABS0(part))
         return _JOIN(*body_parts)
     if a.typ in (TermType.ABS1, TermType.ABS):
-        b = _JOIN(*(shift(bi) for bi in b.parts))  # FIXME is start correct?
+        shifted_b = _JOIN(*(_shift(bi, 0) for bi in b.parts))
         body_parts = []
-        for ai in b.parts:
-            for part in subst(a.head, v + 1, ai).parts:
+        for ai in shifted_b.parts:
+            for part in _subst(a.head, v + 1, _JOIN(ai)).parts:
                 body_parts.append(_LAM(part))
         return _JOIN(*body_parts)
     raise ValueError(f"unexpected term type: {a.typ}")
+
+
+@cache
+def shift(a: JoinTerm, start: int = 0) -> JoinTerm:
+    """Increment all free VARs in a JoinTerm."""
+    return _JOIN(*(_shift(ai, start) for ai in a.parts))
+
+
+@cache
+def subst(a: JoinTerm, v: int, b: JoinTerm) -> JoinTerm:
+    """Substitute a VAR v := b in a JoinTerm."""
+    return JOIN(*(_subst(ai, v, b) for ai in a.parts))
