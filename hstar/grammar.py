@@ -17,6 +17,27 @@ from .util import HashConsMeta, intern
 EMPTY_VARS: Map[int, int] = Map()
 
 
+@cache
+def max_vars(*args: Map[int, int]) -> Map[int, int]:
+    """Element-wise maximum of two maps of variables."""
+    if not args:
+        return EMPTY_VARS
+    result = dict(args[0])
+    for a in args[1:]:
+        for k, v in a.items():
+            result[k] = max(result.get(k, 0), v)
+    return Map(result)
+
+
+@cache
+def add_vars(a: Map[int, int], b: Map[int, int]) -> Map[int, int]:
+    """Add two maps of variables."""
+    result = dict(a)
+    for k, v in b.items():
+        result[k] = result.get(k, 0) + v
+    return Map(result)
+
+
 class TermType(Enum):
     TOP = 0  # by contrast BOT is simply a nullary JOIN
     APP = 1
@@ -26,7 +47,7 @@ class TermType(Enum):
     VAR = 5
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class Term(metaclass=HashConsMeta):
     """Linear normal form."""
 
@@ -38,8 +59,23 @@ class Term(metaclass=HashConsMeta):
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
+    def __repr__(self) -> str:
+        if self.typ == TermType.TOP:
+            return "TOP"
+        if self.typ == TermType.VAR:
+            return f"VAR({self.varname})"
+        if self.typ == TermType.APP:
+            return f"APP({self.head}, {self.body})"
+        if self.typ == TermType.ABS0:
+            return f"ABS0({self.head})"
+        if self.typ == TermType.ABS1:
+            return f"ABS1({self.head})"
+        if self.typ == TermType.ABS:
+            return f"ABS({self.head})"
+        raise ValueError(f"unexpected term type: {self.typ}")
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class JoinTerm(metaclass=HashConsMeta):
     """Join of terms in the Scott lattice."""
 
@@ -47,6 +83,9 @@ class JoinTerm(metaclass=HashConsMeta):
     parts: frozenset[Term]
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
+
+    def __repr__(self) -> str:
+        return f"JOIN({', '.join(map(repr, self.parts))})"
 
 
 def _JOIN(*parts: Term) -> JoinTerm:
@@ -166,25 +205,6 @@ def VAR(v: int) -> JoinTerm:
     """Anonymous substitution variable."""
     assert v >= 0
     return _JOIN(Term(TermType.VAR, varname=v, free_vars=Map({v: 1})))
-
-
-@cache
-def add_vars(a: Map[int, int], b: Map[int, int]) -> Map[int, int]:
-    """Add two maps of variables."""
-    result = dict(a)
-    for k, v in b.items():
-        result[k] += v
-    return Map(result)
-
-
-@cache
-def max_vars(*args: Map[int, int]) -> Map[int, int]:
-    """Element-wise maximum of two maps of variables."""
-    result = dict(args[0])
-    for a in args[1:]:
-        for k, v in a.items():
-            result[k] = max(result.get(k, 0), v)
-    return Map(result)
 
 
 @cache
