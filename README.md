@@ -24,5 +24,6 @@ simple type constructor
 ```
 SIMPLE = ⨆{ <r,s> | s ◦ r ⊑ I }
 ```
-where `⊑` is the Scott ordering, `⨆` is the join operator, `I` is the identity
-function, and `◦` is function composition, and `<r,s> = λx. s(r x)` is a pair.
+where `⊑` is the Scott ordering, `⨆` is the infinitary join operator, `I` is the
+identity function, `◦` is function composition, `<r,s> = (λx. x r s)` is a pair,
+and `r` and `s` range over closed λ-join-calculus terms.
