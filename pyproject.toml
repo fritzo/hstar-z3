@@ -49,7 +49,9 @@ select = [
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
 ]
-ignore = []
+ignore = [
+    "E741",  # ambiguous variable name
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

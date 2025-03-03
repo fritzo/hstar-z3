@@ -1,4 +1,10 @@
-"""De Bruijn SKJ normal forms with hash consing."""
+"""
+# Linear-normal-forms for λ-join-calculus.
+
+Our behavior synthesis search grammar will be a subset of the λ-join-calculus,
+namely those terms that are in a particular linear normal form, i.e. that are
+simplified wrt a set of rewrite rules.
+"""
 
 import sys
 from abc import ABCMeta
@@ -61,9 +67,9 @@ class HashConsMeta(ABCMeta):
 
 
 class TermType(Enum):
-    TOP = 0
+    TOP = 0  # By contrast BOT is simply a nullary JOIN.
     APP = 1
-    K = 2
+    K = 2  # TODO rename to CON?
     LIN = 3
     ABS = 4
     VAR = 5
@@ -78,7 +84,7 @@ class Term(metaclass=HashConsMeta):
 
     # Data.
     typ: TermType
-    varname: int = 0  # For VAR, RVAR, SVAR.
+    varname: int = 0  # For VAR.
     head: "JoinTerm | None" = None
     body: "JoinTerm | None" = None
     # Metadata.

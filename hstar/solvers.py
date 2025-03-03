@@ -1,9 +1,13 @@
 """
-Type checking &lambda;-join-calculus with Z3
-"""
+# Proving properties of λ-join-calculus expressions with Z3.
 
-# flake8: noqa: E741
-# ruff: noqa: E741
+This uses a de Bruijn indexed representation of λ-join-calculus terms, with a
+`LEQ` relation for the Scott ordering, and explicit `BOT` (bottom), `TOP` (top),
+and binary `JOIN` operation wrt the Scott ordering.
+
+The theory includes de Bruijn syntax, Scott ordering, lambda calculus, and
+a types-as-closures.
+"""
 
 import inspect
 from collections.abc import Callable
@@ -16,7 +20,7 @@ Term = z3.Datatype("Term")
 Term.declare("TOP")
 Term.declare("BOT")
 Term.declare("JOIN", ("lhs", Term), ("rhs", Term))
-Term.declare("COMP", ("lhs", Term), ("rhs", Term))
+Term.declare("COMP", ("lhs", Term), ("rhs", Term))  # TODO remove?
 Term.declare("APP", ("lhs", Term), ("rhs", Term))
 Term.declare("VAR", ("index", z3.IntSort()))
 Term.declare("ABS", ("body", Term))
