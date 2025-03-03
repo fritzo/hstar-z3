@@ -4,8 +4,12 @@ This project aims to synthesize λ-join-calculus behaviors using the Z3 SMT solv
 
 The λ-calculus is a simple programming language.
 The λ-join-calculus extends the λ-calculus with a join operator WRT the Scott ordering.
-Let's define a _behavior_ as the equivalence class of _programs_ module the coarsest sensible equivalence relation on programs, namely Hyland and Wadsworth's H* theory of
-observational equivalence, corresponding to Scott's D∞ models.
+Let's define a _behavior_ as the equivalence class of _programs_ modulo the coarsest sensible equivalence relation on programs, namely Hyland and Wadsworth's H* theory of
+observational equivalence, corresponding to Scott's D∞ models:
+```
+M ⊑ N iff ∀ context C[ ], C[M] converges ⇒ C[N] converges
+M ≡ N iff ∀ context C[ ], C[M] converges ⇔ C[N] converges 
+```
 
 We'll leverage Scott's types-as-closures framework that naturally arises when
 extending the λ-calculus with join.
@@ -22,7 +26,7 @@ Our synthesis approach is:
 Our first challenge problem is to synthesize a finitary definition for the
 simple type constructor
 ```
-SIMPLE = ⨆{ <r,s> | s ◦ r ⊑ I }
+SIMPLE = ⨆ { <r,s> | s ◦ r ⊑ I }
 ```
 where `⊑` is the Scott ordering, `⨆` is the infinitary join operator, `I` is the
 identity function, `◦` is function composition, `<r,s> = (λx. x r s)` is a pair,
