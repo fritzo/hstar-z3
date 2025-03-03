@@ -1,5 +1,7 @@
 """Tests for the hstar/grammar.py module."""
 
+from immutables import Map
+
 from hstar.grammar import (
     APP,
     BOT,
@@ -14,7 +16,7 @@ from hstar.grammar import (
 )
 
 
-def test_hash_consing():
+def test_hash_consing() -> None:
     """Test that identical terms are hash-consed to the same object."""
     # Test basic terms
     assert VAR(0) is VAR(0)
@@ -42,7 +44,7 @@ def test_hash_consing():
     assert JOIN(TOP, VAR(0)) is TOP
 
 
-def test_shift_operation():
+def test_shift_operation() -> None:
     """Test that the shift operation works correctly."""
     # Test variable shifting
     assert shift(VAR(0)) is VAR(1)
@@ -76,7 +78,7 @@ def test_shift_operation():
     assert shifted_nested is APP(VAR(1), JOIN(APP(VAR(2), JOIN(VAR(3)))))
 
 
-def test_subst_operation():
+def test_subst_operation() -> None:
     """Test that the substitution operation works correctly."""
     # Basic variable substitution
     assert subst(VAR(0), 0, JOIN(TOP)) is TOP  # [TOP/0]0 = TOP
@@ -126,12 +128,13 @@ def test_subst_operation():
     assert subst(APP(VAR(0), JOIN(VAR(1))), 0, BOT) is APP(BOT, JOIN(VAR(1)))
 
 
-def test_lam_operation():
+def test_lam_operation() -> None:
     """Test that the LAM operation works correctly with hash consing."""
     # Test basic lambda abstraction
     lam0 = LAM(JOIN(VAR(0)))  # \x.x
+    free_vars = Map({0: 1})
     assert lam0.parts == frozenset(
-        [Term(TermType.ABS1, head=Term(TermType.VAR, varname=0, free_vars={"0": 1}))]
+        [Term(TermType.ABS1, head=Term(TermType.VAR, varname=0, free_vars=free_vars))]
     )
 
     # Test that LAM correctly identifies different cases (ABS0, ABS1, ABS)
