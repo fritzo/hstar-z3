@@ -73,4 +73,12 @@ disallow_incomplete_defs = true
 check_untyped_defs = true
 disallow_untyped_decorators = true
 no_implicit_optional = true
-strict_optional = true 
+strict_optional = true
+
+[[tool.mypy.overrides]]
+module = "hstar.grammar"
+disable_error_code = ["misc"]  
+
+[[tool.mypy.overrides]]
+module = "z3"
+ignore_missing_imports = true

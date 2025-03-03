@@ -1,10 +1,3 @@
-"""
-Type checking &lambda;-join-calculus with Z3
-"""
-
-# flake8: noqa: E741
-# ruff: noqa: E741
-
 from collections.abc import Iterator
 from typing import Any
 
