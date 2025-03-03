@@ -6,6 +6,7 @@ Type checking &lambda;-join-calculus with Z3
 # ruff: noqa: E741
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 import z3
@@ -144,7 +145,7 @@ HOAS_EXAMPLES = [
 @pytest.mark.parametrize(
     "pythonic, expected", HOAS_EXAMPLES, ids=[str(e[0]) for e in HOAS_EXAMPLES]
 )
-def test_hoas(pythonic, expected):
+def test_hoas(pythonic: Any, expected: z3.ExprRef) -> None:
     assert hoas(pythonic) == expected
 
 
@@ -197,7 +198,7 @@ def test_subst_eager() -> None:
     assert subst(1, TOP, join_term) == JOIN(VAR(0), TOP)  # [TOP/1](0|1) = 0|TOP
 
 
-def test_consistency(solver: z3.Solver):
+def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     solver.set(timeout=1000)  # in milliseconds
     with solver:
@@ -275,7 +276,7 @@ ORDER_EXAMPLES = {
 
 
 @pytest.mark.parametrize("formula", ORDER_EXAMPLES.values(), ids=ORDER_EXAMPLES.keys())
-def test_ordering(solver: z3.Solver, formula: z3.ExprRef):
+def test_ordering(solver: z3.Solver, formula: z3.ExprRef) -> None:
     check_that(solver, formula)
 
 
@@ -310,7 +311,7 @@ LAMBDA_EXAMPLES = {
 @pytest.mark.parametrize(
     "formula", LAMBDA_EXAMPLES.values(), ids=LAMBDA_EXAMPLES.keys()
 )
-def test_lambda(solver: z3.Solver, formula: z3.ExprRef):
+def test_lambda(solver: z3.Solver, formula: z3.ExprRef) -> None:
     """Test lambda calculus properties."""
     check_that(solver, formula)
 
@@ -342,7 +343,7 @@ CONV_EXAMPLES = {
 
 
 @pytest.mark.parametrize("formula", CONV_EXAMPLES.values(), ids=CONV_EXAMPLES.keys())
-def test_conv(solver: z3.Solver, formula: z3.ExprRef):
+def test_conv(solver: z3.Solver, formula: z3.ExprRef) -> None:
     """Test convergence properties."""
     check_that(solver, formula)
 
@@ -356,7 +357,7 @@ TUPLE_EXAMPLES = {
 
 
 @pytest.mark.parametrize("formula", TUPLE_EXAMPLES.values(), ids=TUPLE_EXAMPLES.keys())
-def test_tuple_ordering(solver: z3.Solver, formula: z3.ExprRef):
+def test_tuple_ordering(solver: z3.Solver, formula: z3.ExprRef) -> None:
     check_that(solver, formula)
 
 
@@ -375,7 +376,7 @@ SIMPLE_EXAMPLES = {
 @pytest.mark.parametrize(
     "formula", SIMPLE_EXAMPLES.values(), ids=SIMPLE_EXAMPLES.keys()
 )
-def test_simple(solver: z3.Solver, formula: z3.ExprRef):
+def test_simple(solver: z3.Solver, formula: z3.ExprRef) -> None:
     """Test SIMPLE type properties."""
     check_that(solver, formula)
 
@@ -421,6 +422,6 @@ TYPE_EXAMPLES = {
 
 
 @pytest.mark.parametrize("formula", TYPE_EXAMPLES.values(), ids=TYPE_EXAMPLES.keys())
-def test_types(solver: z3.Solver, formula: z3.ExprRef):
+def test_types(solver: z3.Solver, formula: z3.ExprRef) -> None:
     """Test type system properties."""
     check_that(solver, formula)
