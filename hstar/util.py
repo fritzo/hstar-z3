@@ -51,3 +51,19 @@ class HashConsMeta(ABCMeta):
     def __getitem__(self, params):  # type: ignore
         """Binding a generic type has no runtime effect."""
         return self
+
+
+def boool_and(lhs: bool | None, rhs: bool | None) -> bool | None:
+    if lhs is True and rhs is True:
+        return True
+    if lhs is False or rhs is False:
+        return False
+    return None
+
+
+def boool_or(lhs: bool | None, rhs: bool | None) -> bool | None:
+    if lhs is True or rhs is True:
+        return True
+    if lhs is False and rhs is False:
+        return False
+    return None

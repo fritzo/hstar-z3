@@ -12,6 +12,7 @@ from hstar.grammar import (
     VAR,
     Term,
     TermType,
+    complexity,
     shift,
     subst,
 )
@@ -179,3 +180,31 @@ def test_eager_linear_reduction() -> None:
     assert LAM(BOT) == BOT
     assert APP(LAM(VAR(1)), VAR(1)) == VAR(0)
     assert APP(LAM(VAR(0)), VAR(1)) == VAR(1)
+
+
+def test_complexity() -> None:
+    """Test that complexity calculation is correct for various terms."""
+    # Test complexity of basic terms
+    assert complexity(TOP) == 1
+    assert complexity(BOT) == 1
+    assert complexity(VAR(0)) == 1
+
+    # Test complexity of single application
+    app_term = APP(VAR(0), VAR(1))
+    assert complexity(app_term) == 3  # 1 (APP) + 1 (VAR) + 1 (VAR)
+
+    # Test complexity of lambda terms
+    id_term = LAM(VAR(0))  # λx.x
+    assert complexity(id_term) == 2  # 1 (ABS1) + 1 (VAR)
+
+    const_term = LAM(VAR(1))  # λx.y
+    assert complexity(const_term) == 2  # 1 (ABS0) + 1 (VAR)
+
+    # Test complexity of nested applications
+    nested_app = APP(VAR(0), APP(VAR(1), VAR(2)))
+    assert complexity(nested_app) == 5
+    # 1 (APP) + 1 (VAR) + 1 (APP) + 1 (VAR) + 1 (VAR)
+
+    # Test complexity of join terms
+    join_term = JOIN(VAR(0), VAR(1))
+    assert complexity(join_term) == 3  # 1 (VAR) + 1 (VAR) + (2 - 1)

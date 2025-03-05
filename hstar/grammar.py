@@ -131,7 +131,7 @@ def _APP(head: Term, body: JoinTerm) -> JoinTerm:
         return _JOIN(head.head)
     if head.typ == TermType.ABS1:
         assert head.head is not None
-        return _subst(head.head, 0, body, head.head)
+        return _subst(head.head, 0, body)
     # Construct.
     arg = Term(
         TermType.APP,
@@ -272,3 +272,32 @@ def shift(term: JoinTerm, start: int = 0) -> JoinTerm:
 def subst(term: JoinTerm, old: int, new: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a JoinTerm."""
     return JOIN(*(_subst(part, old, new) for part in term.parts))
+
+
+def _complexity(term: Term) -> int:
+    """Complexity of a term."""
+    if term.typ == TermType.TOP:
+        return 1
+    if term.typ == TermType.VAR:
+        return 1
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        return 1 + _complexity(term.head) + complexity(term.body)
+    if term.typ == TermType.ABS0:
+        assert term.head is not None
+        return 1 + _complexity(term.head)
+    if term.typ == TermType.ABS1:
+        assert term.head is not None
+        return 1 + _complexity(term.head)
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return 1 + _complexity(term.head)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+def complexity(term: JoinTerm) -> int:
+    """Complexity of a term."""
+    if not term.parts:
+        return 1
+    return sum(_complexity(part) for part in term.parts) + len(term.parts) - 1
