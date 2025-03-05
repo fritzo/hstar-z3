@@ -22,8 +22,6 @@ def test_hash_consing() -> None:
     # Test basic terms
     assert VAR(0) is VAR(0)
     assert VAR(1) is VAR(1)
-    assert TOP is TOP
-    assert BOT is BOT
 
     # Test compound terms
     assert JOIN(VAR(0), VAR(1)) is JOIN(VAR(0), VAR(1))
@@ -33,6 +31,8 @@ def test_hash_consing() -> None:
     assert JOIN(VAR(0), JOIN(VAR(1), VAR(2))) is JOIN(JOIN(VAR(0), VAR(1)), VAR(2))
     assert JOIN(VAR(0), VAR(1)) is JOIN(VAR(1), VAR(0))
     assert JOIN(VAR(0), VAR(0)) is VAR(0), VAR(1)
+    assert JOIN(TOP) is TOP
+    assert JOIN(BOT) is BOT
 
     # Test that different terms are different objects
     assert VAR(0) is not VAR(1)
@@ -42,13 +42,10 @@ def test_hash_consing() -> None:
     lambda_term2 = LAM(JOIN(VAR(0)))
     assert lambda_term1 is lambda_term2
 
-    # Test that JOIN is idempotent due to hash consing
-
     # Test that TOP absorbs other terms in a join
     assert JOIN(TOP, VAR(0)) is TOP
 
 
-@pytest.mark.xfail(reason="TODO")
 def test_shift_operation() -> None:
     """Test that the shift operation works correctly."""
     # Test variable shifting
