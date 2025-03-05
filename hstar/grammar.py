@@ -221,7 +221,7 @@ def _shift(a: Term, start: int = 0) -> Term:
         assert a.head is not None
         assert a.body is not None
         head = _shift(a.head, start)
-        body = JOIN(*(_subst(ai, 0, VAR(start)) for ai in a.body.parts))
+        body = shift(a.body, start)  # Use shift on the body instead of substitution
         parts = _APP(head, body).parts
         assert len(parts) == 1
         return next(iter(parts))
