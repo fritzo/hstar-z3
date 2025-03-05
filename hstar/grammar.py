@@ -240,7 +240,6 @@ def _shift(a: Term, start: int = 0) -> Term:
 @cache
 def _subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a."""
-    body_parts: list[Term]
     if a.free_vars.get(v, 0) == 0:
         return _JOIN(a)
     if a.typ == TermType.VAR:
@@ -250,22 +249,16 @@ def _subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
         assert a.head is not None
         assert a.body is not None
         head = _subst(a.head, v, b)
-        body = JOIN(*(_subst(ai, v, b) for ai in a.body.parts))
+        body = subst(a.body, v, b)
         return APP(head, body)
     if a.typ == TermType.ABS0:
         assert a.head is not None
-        body_parts = []
-        for ai in b.parts:
-            for part in _subst(a.head, v, _JOIN(ai)).parts:
-                body_parts.append(_ABS0(part))
-        return _JOIN(*body_parts)
+        head_subst = _subst(a.head, v + 1, shift(b))
+        return LAM(head_subst)
     if a.typ in (TermType.ABS1, TermType.ABS):
-        shifted_b = _JOIN(*(_shift(bi, 0) for bi in b.parts))
-        body_parts = []
-        for ai in shifted_b.parts:
-            for part in _subst(a.head, v + 1, _JOIN(ai)).parts:
-                body_parts.append(_LAM(part))
-        return _JOIN(*body_parts)
+        assert a.head is not None
+        head_subst = _subst(a.head, v + 1, shift(b))
+        return LAM(head_subst)
     raise ValueError(f"unexpected term type: {a.typ}")
 
 
