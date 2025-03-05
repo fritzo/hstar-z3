@@ -17,7 +17,6 @@ from hstar.grammar import (
 )
 
 
-@pytest.mark.xfail(reason="TODO")
 def test_hash_consing() -> None:
     """Test that identical terms are hash-consed to the same object."""
     # Test basic terms
@@ -30,9 +29,13 @@ def test_hash_consing() -> None:
     assert JOIN(VAR(0), VAR(1)) is JOIN(VAR(0), VAR(1))
     assert APP(VAR(0), JOIN(VAR(1))) is APP(VAR(0), JOIN(VAR(1)))
 
+    # Test associativity, commutativity, and idempotence of JOIN
+    assert JOIN(VAR(0), JOIN(VAR(1), VAR(2))) is JOIN(JOIN(VAR(0), VAR(1)), VAR(2))
+    assert JOIN(VAR(0), VAR(1)) is JOIN(VAR(1), VAR(0))
+    assert JOIN(VAR(0), VAR(0)) is VAR(0), VAR(1)
+
     # Test that different terms are different objects
     assert VAR(0) is not VAR(1)
-    assert JOIN(VAR(0), VAR(1)) is not JOIN(VAR(1), VAR(0))
 
     # Test LAM hash consing
     lambda_term1 = LAM(JOIN(VAR(0)))
@@ -123,8 +126,8 @@ def test_subst_operation() -> None:
 
     # Join substitution
     join_term = JOIN(VAR(0), VAR(1))  # 0 | 1
-    assert subst(join_term, 0, JOIN(TOP)) is JOIN(TOP, VAR(1))  # [TOP/0](0|1) = TOP|1
-    assert subst(join_term, 1, JOIN(TOP)) is JOIN(VAR(0), TOP)  # [TOP/1](0|1) = 0|TOP
+    assert subst(join_term, 0, JOIN(TOP)) is JOIN(TOP, VAR(1))
+    assert subst(join_term, 1, JOIN(TOP)) is JOIN(VAR(0), TOP)
 
     # Test BOT substitution
     assert subst(VAR(0), 0, BOT) is BOT
