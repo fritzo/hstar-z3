@@ -217,7 +217,7 @@ def test_complexity() -> None:
 
 def test_enumerator() -> None:
     actual = list(itertools.islice(Enumerator(), 1000))
-    print("\n".join(str(x) for x in actual))
+    # print("\n".join(str(x) for x in actual))
     expected = actual[:]
     expected.sort(key=lambda x: (complexity(x), repr(x)))
     assert actual == expected

@@ -315,7 +315,7 @@ def complexity(term: JoinTerm) -> int:
         return 1
     if len(term.parts) == 1:
         return _complexity(next(iter(term.parts)))
-    return max(_complexity(part) for part in term.parts) + 1
+    return 1 + max(_complexity(part) for part in term.parts)
 
 
 class Enumerator:
