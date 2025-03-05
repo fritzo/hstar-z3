@@ -40,6 +40,12 @@ include = '\.pyi?$'
 target-version = "py312"
 line-length = 88
 
+[tool.flake8]
+max-line-length = 88
+
+[tool.pylint]
+max-line-length = 88
+
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
