@@ -1,5 +1,7 @@
 """Tests for the hstar/grammar.py module."""
 
+import itertools
+
 import pytest
 from immutables import Map
 
@@ -10,6 +12,7 @@ from hstar.grammar import (
     LAM,
     TOP,
     VAR,
+    Enumerator,
     Term,
     TermType,
     complexity,
@@ -188,23 +191,33 @@ def test_complexity() -> None:
     assert complexity(TOP) == 1
     assert complexity(BOT) == 1
     assert complexity(VAR(0)) == 1
+    assert complexity(VAR(1)) == 2
+    assert complexity(VAR(2)) == 3
 
     # Test complexity of single application
     app_term = APP(VAR(0), VAR(1))
-    assert complexity(app_term) == 3  # 1 (APP) + 1 (VAR) + 1 (VAR)
+    assert complexity(app_term) == 4  # 1 (APP) + 1 (VAR) + 2 (VAR)
 
     # Test complexity of lambda terms
     id_term = LAM(VAR(0))  # λx.x
     assert complexity(id_term) == 2  # 1 (ABS1) + 1 (VAR)
 
     const_term = LAM(VAR(1))  # λx.y
-    assert complexity(const_term) == 2  # 1 (ABS0) + 1 (VAR)
+    assert complexity(const_term) == 3  # 1 (ABS0) + 2 (VAR)
 
     # Test complexity of nested applications
     nested_app = APP(VAR(0), APP(VAR(1), VAR(2)))
-    assert complexity(nested_app) == 5
-    # 1 (APP) + 1 (VAR) + 1 (APP) + 1 (VAR) + 1 (VAR)
+    assert complexity(nested_app) == 8
+    # 1 (APP) + 1 (VAR) + 1 (APP) + 2 (VAR) + 3 (VAR)
 
     # Test complexity of join terms
     join_term = JOIN(VAR(0), VAR(1))
-    assert complexity(join_term) == 3  # 1 (VAR) + 1 (VAR) + (2 - 1)
+    assert complexity(join_term) == 3  # max(1 (VAR), 2 (VAR)) + (2 - 1)
+
+
+def test_enumerator() -> None:
+    actual = list(itertools.islice(Enumerator(), 1000))
+    print("\n".join(str(x) for x in actual))
+    expected = actual[:]
+    expected.sort(key=lambda x: (complexity(x), repr(x)))
+    assert actual == expected

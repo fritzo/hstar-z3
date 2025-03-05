@@ -6,6 +6,8 @@ namely those terms that are in a particular linear normal form, i.e. that are
 simplified wrt a set of rewrite rules.
 """
 
+import itertools
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
@@ -85,6 +87,10 @@ class JoinTerm(metaclass=HashConsMeta):
     free_vars: Map[int, int] = EMPTY_VARS
 
     def __repr__(self) -> str:
+        if not self.parts:
+            return "BOT"
+        if len(self.parts) == 1:
+            return repr(next(iter(self.parts)))
         return f"JOIN({', '.join(map(repr, self.parts))})"
 
 
@@ -201,10 +207,17 @@ def LAM(head: JoinTerm) -> JoinTerm:
 
 
 @cache
+def _VAR(varname: int) -> Term:
+    """Anonymous substitution variable."""
+    assert varname >= 0
+    return Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1}))
+
+
+@cache
 def VAR(varname: int) -> JoinTerm:
     """Anonymous substitution variable."""
     assert varname >= 0
-    return _JOIN(Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1})))
+    return _JOIN(_VAR(varname))
 
 
 @cache
@@ -279,7 +292,7 @@ def _complexity(term: Term) -> int:
     if term.typ == TermType.TOP:
         return 1
     if term.typ == TermType.VAR:
-        return 1
+        return 1 + term.varname
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
@@ -300,4 +313,62 @@ def complexity(term: JoinTerm) -> int:
     """Complexity of a term."""
     if not term.parts:
         return 1
-    return sum(_complexity(part) for part in term.parts) + len(term.parts) - 1
+    if len(term.parts) == 1:
+        return _complexity(next(iter(term.parts)))
+    return max(_complexity(part) for part in term.parts) + 1
+
+
+class Enumerator:
+    """Generator for all terms, sorted by complexity, then repr."""
+
+    def __init__(self) -> None:
+        self._levels: list[set[JoinTerm]] = [set()]
+
+    def __iter__(self) -> Iterator[JoinTerm]:
+        for complexity in itertools.count():
+            level = list(self._get_level(complexity))
+            level.sort(key=repr)
+            yield from level
+
+    def _get_level(self, complexity: int) -> set[JoinTerm]:
+        while len(self._levels) <= complexity:
+            self._add_level()
+        return self._levels[complexity]
+
+    def _add_level(self) -> None:
+        self._levels.append(set())
+        c = len(self._levels) - 1
+
+        # Add nullary terms.
+        if c == 1:
+            self._add_term(BOT)
+            self._add_term(TOP)
+        # complexity(VAR(n)) = 1 + n
+        self._add_term(VAR(c - 1))
+
+        # Add LAM terms.
+        # complexity(LAM(term)) <= 1 + complexity(term)
+        for term in self._get_level(c - 1):
+            self._add_term(LAM(term))
+
+        # Add APP terms.
+        # complexity(APP(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
+        for c_lhs in range(1, c):
+            c_rhs = c - c_lhs - 1
+            lhs_level = self._get_level(c_lhs)
+            rhs_level = self._get_level(c_rhs)
+            for lhs, rhs in itertools.product(lhs_level, rhs_level):
+                self._add_term(APP(lhs, rhs))
+
+        # Add JOIN terms.
+        # complexity(JOIN(lhs, rhs)) <= 1 + max(complexity(lhs), complexity(rhs))
+        lhs_level = self._get_level(c - 1)
+        for c_rhs in range(1, c):
+            rhs_level = self._get_level(c_rhs)
+            for lhs, rhs in itertools.product(lhs_level, rhs_level):
+                self._add_term(JOIN(lhs, rhs))
+
+    def _add_term(self, term: JoinTerm) -> None:
+        c = complexity(term)
+        assert c < len(self._levels)
+        self._levels[c].add(term)
