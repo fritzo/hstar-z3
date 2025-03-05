@@ -121,154 +121,154 @@ BOT: JoinTerm = JOIN()
 
 
 @cache
-def _APP(a: Term, b: JoinTerm) -> JoinTerm:
+def _APP(head: Term, body: JoinTerm) -> JoinTerm:
     """Application."""
     # Eagerly linearly reduce.
-    if a is _TOP:
+    if head is _TOP:
         return TOP
-    if a.typ == TermType.ABS0:
-        assert a.head is not None
-        return _JOIN(a.head)
-    if a.typ == TermType.ABS1:
-        assert a.head is not None
-        return _subst(a.head, 0, b)
+    if head.typ == TermType.ABS0:
+        assert head.head is not None
+        return _JOIN(head.head)
+    if head.typ == TermType.ABS1:
+        assert head.head is not None
+        return _subst(head.head, 0, body, head.head)
     # Construct.
     arg = Term(
         TermType.APP,
-        head=a,
-        body=b,
-        free_vars=add_vars(a.free_vars, b.free_vars),
+        head=head,
+        body=body,
+        free_vars=add_vars(head.free_vars, body.free_vars),
     )
     return _JOIN(arg)
 
 
 @cache
-def APP(a: JoinTerm, b: JoinTerm) -> JoinTerm:
+def APP(head: JoinTerm, body: JoinTerm) -> JoinTerm:
     """Application."""
     args: list[Term] = []
-    for ai in a.parts:
-        args.extend(_APP(ai, b).parts)
+    for part in head.parts:
+        args.extend(_APP(part, body).parts)
     return _JOIN(*args)
 
 
-def _ABS0(a: Term) -> Term:
+def _ABS0(head: Term) -> Term:
     """Constant function."""
-    assert a.typ != TermType.TOP, "use LAM instead"
+    assert head.typ != TermType.TOP, "use LAM instead"
     # Construct.
     return Term(
         TermType.ABS0,
-        head=a,
-        free_vars=a.free_vars,
+        head=head,
+        free_vars=head.free_vars,
     )
 
 
 @cache
-def _ABS1(a: Term) -> Term:
+def _ABS1(head: Term) -> Term:
     """Linear function."""
-    assert a.typ != TermType.TOP, "use LAM instead"
-    assert a.free_vars.get(0, 0) == 1, "use LAM instead"
+    assert head.typ != TermType.TOP, "use LAM instead"
+    assert head.free_vars.get(0, 0) == 1, "use LAM instead"
     # Construct.
-    return Term(TermType.ABS1, head=a, free_vars=a.free_vars)
+    return Term(TermType.ABS1, head=head, free_vars=head.free_vars)
 
 
 @cache
-def _ABS(a: Term) -> Term:
+def _ABS(head: Term) -> Term:
     """Nonlinear function."""
-    assert a.typ != TermType.TOP, "use LAM instead"
-    assert a.free_vars.get(0, 0) > 1, "use LAM instead"
+    assert head.typ != TermType.TOP, "use LAM instead"
+    assert head.free_vars.get(0, 0) > 1, "use LAM instead"
     # Construct.
-    free_vars = intern(Map({k - 1: v for k, v in a.free_vars.items() if k}))
-    return Term(TermType.ABS, head=a, free_vars=free_vars)
+    free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
+    return Term(TermType.ABS, head=head, free_vars=free_vars)
 
 
-def _LAM(a: Term) -> Term:
+def _LAM(head: Term) -> Term:
     """Lambda abstraction."""
-    occurrences = a.free_vars.get(0, 0)
+    occurrences = head.free_vars.get(0, 0)
     if occurrences == 0:
-        return _ABS0(a)
+        return _ABS0(head)
     if occurrences == 1:
-        return _ABS1(a)
-    return _ABS(a)
+        return _ABS1(head)
+    return _ABS(head)
 
 
-def LAM(a: JoinTerm) -> JoinTerm:
+def LAM(head: JoinTerm) -> JoinTerm:
     """Lambda abstraction."""
     # Eagerly linearly reduce.
-    if a is TOP:
+    if head is TOP:
         return TOP
     # Construct.
-    return _JOIN(*(_LAM(ai) for ai in a.parts))
+    return _JOIN(*(_LAM(part) for part in head.parts))
 
 
 @cache
-def VAR(v: int) -> JoinTerm:
+def VAR(varname: int) -> JoinTerm:
     """Anonymous substitution variable."""
-    assert v >= 0
-    return _JOIN(Term(TermType.VAR, varname=v, free_vars=Map({v: 1})))
+    assert varname >= 0
+    return _JOIN(Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1})))
 
 
 @cache
-def _shift(a: Term, start: int = 0) -> Term:
+def _shift(term: Term, start: int = 0) -> Term:
     """Increment all free VARs in a."""
-    if all(v < start for v in a.free_vars):
-        return a
-    if a.typ == TermType.VAR:
-        assert a.varname >= start
+    if all(v < start for v in term.free_vars):
+        return term
+    if term.typ == TermType.VAR:
+        assert term.varname >= start
         return Term(
-            TermType.VAR, varname=a.varname + 1, free_vars=Map({a.varname + 1: 1})
+            TermType.VAR, varname=term.varname + 1, free_vars=Map({term.varname + 1: 1})
         )
-    if a.typ == TermType.APP:
-        assert a.head is not None
-        assert a.body is not None
-        head = _shift(a.head, start)
-        body = shift(a.body, start)  # Use shift on the body instead of substitution
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        head = _shift(term.head, start)
+        body = shift(term.body, start)  # Use shift on the body instead of substitution
         parts = _APP(head, body).parts
         assert len(parts) == 1
         return next(iter(parts))
-    if a.typ == TermType.ABS0:
-        assert a.head is not None
-        return _ABS0(_shift(a.head, start))
-    if a.typ == TermType.ABS1:
-        assert a.head is not None
-        return _ABS1(_shift(a.head, start + 1))
-    if a.typ == TermType.ABS:
-        assert a.head is not None
-        return _ABS(_shift(a.head, start + 1))
-    raise ValueError(f"unexpected term type: {a.typ}")
+    if term.typ == TermType.ABS0:
+        assert term.head is not None
+        return _ABS0(_shift(term.head, start))
+    if term.typ == TermType.ABS1:
+        assert term.head is not None
+        return _ABS1(_shift(term.head, start + 1))
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return _ABS(_shift(term.head, start + 1))
+    raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @cache
-def _subst(a: Term, v: int, b: JoinTerm) -> JoinTerm:
+def _subst(term: Term, old: int, new: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a."""
-    if a.free_vars.get(v, 0) == 0:
-        return _JOIN(a)
-    if a.typ == TermType.VAR:
-        assert a.varname == v
-        return b
-    if a.typ == TermType.APP:
-        assert a.head is not None
-        assert a.body is not None
-        head = _subst(a.head, v, b)
-        body = subst(a.body, v, b)
+    if term.free_vars.get(old, 0) == 0:
+        return _JOIN(term)
+    if term.typ == TermType.VAR:
+        assert term.varname == old
+        return new
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        head = _subst(term.head, old, new)
+        body = subst(term.body, old, new)
         return APP(head, body)
-    if a.typ == TermType.ABS0:
-        assert a.head is not None
-        head_subst = _subst(a.head, v + 1, shift(b))
+    if term.typ == TermType.ABS0:
+        assert term.head is not None
+        head_subst = _subst(term.head, old + 1, shift(new))
         return LAM(head_subst)
-    if a.typ in (TermType.ABS1, TermType.ABS):
-        assert a.head is not None
-        head_subst = _subst(a.head, v + 1, shift(b))
+    if term.typ in (TermType.ABS1, TermType.ABS):
+        assert term.head is not None
+        head_subst = _subst(term.head, old + 1, shift(new))
         return LAM(head_subst)
-    raise ValueError(f"unexpected term type: {a.typ}")
+    raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @cache
-def shift(a: JoinTerm, start: int = 0) -> JoinTerm:
+def shift(term: JoinTerm, start: int = 0) -> JoinTerm:
     """Increment all free VARs in a JoinTerm."""
-    return _JOIN(*(_shift(ai, start) for ai in a.parts))
+    return _JOIN(*(_shift(part, start) for part in term.parts))
 
 
 @cache
-def subst(a: JoinTerm, v: int, b: JoinTerm) -> JoinTerm:
+def subst(term: JoinTerm, old: int, new: JoinTerm) -> JoinTerm:
     """Substitute a VAR v := b in a JoinTerm."""
-    return JOIN(*(_subst(ai, v, b) for ai in a.parts))
+    return JOIN(*(_subst(part, old, new) for part in term.parts))
