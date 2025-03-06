@@ -50,7 +50,7 @@ def test_hash_consing() -> None:
     assert JOIN(TOP, VAR(0)) is TOP
 
 
-def test_shift_operation() -> None:
+def test_shift() -> None:
     """Test that the shift operation works correctly."""
     # Test variable shifting
     assert shift(VAR(0)) is VAR(1)
@@ -84,59 +84,72 @@ def test_shift_operation() -> None:
     assert shifted_nested is APP(VAR(1), JOIN(APP(VAR(2), JOIN(VAR(3)))))
 
 
-@pytest.mark.xfail(reason="TODO")
-def test_subst_operation() -> None:
+def test_subst() -> None:
     """Test that the substitution operation works correctly."""
     # Basic variable substitution
-    assert subst(VAR(0), 0, JOIN(TOP)) is TOP  # [TOP/0]0 = TOP
-    assert subst(VAR(1), 0, JOIN(TOP)) is VAR(1)  # [TOP/0]1 = 1
-    assert subst(VAR(0), 1, JOIN(TOP)) is VAR(0)  # [TOP/1]0 = 0
-    assert subst(VAR(1), 1, JOIN(TOP)) is TOP  # [TOP/1]1 = TOP
+    assert subst(VAR(0), Map({0: TOP})) is TOP  # [TOP/0]0 = TOP
+    assert subst(VAR(1), Map({0: TOP})) is VAR(1)  # [TOP/0]1 = 1
+    assert subst(VAR(0), Map({1: TOP})) is VAR(0)  # [TOP/1]0 = 0
+    assert subst(VAR(1), Map({1: TOP})) is TOP  # [TOP/1]1 = TOP
+
+    # Multiple simultaneous substitutions
+    assert subst(VAR(0), Map({0: VAR(1), 1: TOP})) is VAR(1)  # [1/0, TOP/1]0 = 1
+    assert subst(VAR(1), Map({0: VAR(2), 1: TOP})) is TOP  # [2/0, TOP/1]1 = TOP
+    actual = subst(JOIN(VAR(0), VAR(1)), Map({0: VAR(2), 1: VAR(3)}))
+    assert actual is JOIN(VAR(2), VAR(3))
 
     # Identity function substitution
     id_term = LAM(JOIN(VAR(0)))  # \x.x
-    assert subst(id_term, 0, JOIN(TOP)) is id_term  # [TOP/0](\x.x) = \x.x
-    assert subst(id_term, 1, JOIN(TOP)) is id_term  # [TOP/1](\x.x) = \x.x
+    assert subst(id_term, Map({0: TOP})) is id_term  # [TOP/0](\x.x) = \x.x
+    assert subst(id_term, Map({1: TOP})) is id_term  # [TOP/1](\x.x) = \x.x
 
     # Application substitution
     app_term = APP(VAR(0), JOIN(VAR(1)))  # 0 1
-    assert subst(app_term, 0, JOIN(TOP)) is APP(
+    assert subst(app_term, Map({0: TOP})) is APP(
         TOP, JOIN(VAR(1))
     )  # [TOP/0](0 1) = TOP 1
-    assert subst(app_term, 1, JOIN(TOP)) is APP(
+    assert subst(app_term, Map({1: TOP})) is APP(
         VAR(0), JOIN(TOP)
     )  # [TOP/1](0 1) = 0 TOP
+
+    # Multiple substitutions in application
+    assert subst(app_term, Map({0: VAR(2), 1: TOP})) is APP(
+        VAR(2), JOIN(TOP)
+    )  # [2/0, TOP/1](0 1) = 2 TOP
 
     # Nested abstraction substitution
     # \x.1 x
     nested = LAM(JOIN(APP(VAR(1), JOIN(VAR(0)))))
     # [TOP/1](\x.1 x)
-    subst_result = subst(nested, 1, JOIN(TOP))
-    expected = LAM(JOIN(APP(TOP, JOIN(VAR(0)))))
-    assert subst_result is expected
+    assert subst(nested, Map({0: TOP})) is TOP
 
     # More complex substitution cases
-    complex_term = LAM(
-        JOIN(APP(VAR(0), JOIN(APP(VAR(1), JOIN(VAR(2))))))
-    )  # \x. x (1 2)
+    complex_term = LAM(APP(VAR(0), APP(VAR(1), VAR(2))))  # \x. x (1 2)
     # When substituting for var 1
-    result = subst(complex_term, 1, JOIN(TOP))
+    actual = subst(complex_term, Map({0: TOP}))
     # Expected: \x. x (TOP 2)
-    expected = LAM(JOIN(APP(VAR(0), JOIN(APP(TOP, JOIN(VAR(2)))))))
-    assert result is expected
+    expected = LAM(APP(VAR(0), TOP))
+    assert actual is expected
 
     # Join substitution
     join_term = JOIN(VAR(0), VAR(1))  # 0 | 1
-    assert subst(join_term, 0, JOIN(TOP)) is JOIN(TOP, VAR(1))
-    assert subst(join_term, 1, JOIN(TOP)) is JOIN(VAR(0), TOP)
+    assert subst(join_term, Map({0: TOP})) is JOIN(TOP, VAR(1))
+    assert subst(join_term, Map({1: TOP})) is JOIN(VAR(0), TOP)
+
+    # Multiple substitutions in join
+    assert subst(join_term, Map({0: TOP, 1: VAR(2)})) is JOIN(TOP, VAR(2))
 
     # Test BOT substitution
-    assert subst(VAR(0), 0, BOT) is BOT
-    assert subst(APP(VAR(0), JOIN(VAR(1))), 0, BOT) is APP(BOT, JOIN(VAR(1)))
+    assert subst(VAR(0), Map({0: BOT})) is BOT
+    assert subst(APP(VAR(0), JOIN(VAR(1))), Map({0: BOT})) is APP(BOT, JOIN(VAR(1)))
+
+    # Test empty environment
+    assert subst(VAR(0), Map()) is VAR(0)
+    assert subst(APP(VAR(0), JOIN(VAR(1))), Map()) is APP(VAR(0), JOIN(VAR(1)))
 
 
 @pytest.mark.xfail(reason="TODO")
-def test_lam_operation() -> None:
+def test_lam() -> None:
     """Test that the LAM operation works correctly with hash consing."""
     # Test basic lambda abstraction
     lam0 = LAM(JOIN(VAR(0)))  # \x.x

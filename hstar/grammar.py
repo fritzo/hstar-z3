@@ -137,7 +137,7 @@ def _APP(head: _Term, body: Term) -> Term:
         return _JOIN(head.head)
     if head.typ == TermType.ABS1:
         assert head.head is not None
-        return _subst(head.head, 0, body)
+        return _subst(head.head, Map({0: body}))
     # Construct.
     arg = _Term(
         TermType.APP,
@@ -220,6 +220,10 @@ def VAR(varname: int) -> Term:
     return _JOIN(_VAR(varname))
 
 
+Env = Map[int, Term]
+EMPTY_ENV: Env = Map()
+
+
 @cache
 def _shift(term: _Term, start: int = 0) -> _Term:
     """Increment all free VARs in a."""
@@ -251,40 +255,64 @@ def _shift(term: _Term, start: int = 0) -> _Term:
 
 
 @cache
-def _subst(term: _Term, old: int, new: Term) -> Term:
-    """Substitute a VAR v := b in a."""
-    if term.free_vars.get(old, 0) == 0:
-        return _JOIN(term)
-    if term.typ == TermType.VAR:
-        assert term.varname == old
-        return new
-    if term.typ == TermType.APP:
-        assert term.head is not None
-        assert term.body is not None
-        head = _subst(term.head, old, new)
-        body = subst(term.body, old, new)
-        return APP(head, body)
-    if term.typ == TermType.ABS0:
-        assert term.head is not None
-        head_subst = _subst(term.head, old + 1, shift(new))
-        return LAM(head_subst)
-    if term.typ in (TermType.ABS1, TermType.ABS):
-        assert term.head is not None
-        head_subst = _subst(term.head, old + 1, shift(new))
-        return LAM(head_subst)
-    raise ValueError(f"unexpected term type: {term.typ}")
-
-
-@cache
 def shift(term: Term, start: int = 0) -> Term:
     """Increment all free VARs in a JoinTerm."""
     return _JOIN(*(_shift(part, start) for part in term.parts))
 
 
+def env_shift(env: Env, start: int = 0) -> Env:
+    """Increment all free VARs in an Env."""
+    result: dict[int, Term] = {}
+    for k, v in env.items():
+        if k >= start:
+            k += 1
+        v = shift(v, start)
+        result[k] = v
+    return Map(result)
+
+
 @cache
-def subst(term: Term, old: int, new: Term) -> Term:
-    """Substitute a VAR v := b in a JoinTerm."""
-    return JOIN(*(_subst(part, old, new) for part in term.parts))
+def _subst(term: _Term, env: Env) -> Term:
+    """Substitute variables according to an environment mapping."""
+    # Check if term has any free variables that are in the environment
+    if not any(k in term.free_vars for k in env):
+        return _JOIN(term)
+
+    if term.typ == TermType.VAR:
+        # If variable is in environment, return its substitution
+        if term.varname in env:
+            return env[term.varname]
+        return _JOIN(term)
+
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        head = _subst(term.head, env)
+        body = subst(term.body, env)
+        return APP(head, body)
+
+    if term.typ == TermType.ABS0:
+        assert term.head is not None
+        # ABS0 doesn't need environment shifting since the bound variable doesn't occur
+        head_subst = _subst(term.head, env)
+        return LAM(head_subst)
+
+    if term.typ in (TermType.ABS1, TermType.ABS):
+        assert term.head is not None
+        # Shift all terms in environment for lambda body
+        shifted_env = env_shift(env)
+        head_subst = _subst(term.head, shifted_env)
+        return LAM(head_subst)
+
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@cache
+def subst(term: Term, env: Env) -> Term:
+    """Substitute variables according to an environment mapping in a JoinTerm."""
+    if not env:
+        return term
+    return JOIN(*(_subst(part, env) for part in term.parts))
 
 
 def _complexity(term: _Term) -> int:
@@ -376,6 +404,10 @@ class Enumerator:
             self._levels[c].add(term)
         # Otherwise linear reduction has produced a more complex term that we
         # will discard here but reconstruct later.
+
+
+class UnificationFailure(Exception):
+    """Raised when unification fails."""
 
 
 def refines(special: Term, general: Term) -> bool:
