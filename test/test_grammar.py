@@ -212,7 +212,7 @@ def test_complexity() -> None:
 
     # Test complexity of join terms
     join_term = JOIN(VAR(0), VAR(1))
-    assert complexity(join_term) == 3  # max(1 (VAR), 2 (VAR)) + (2 - 1)
+    assert complexity(join_term) == 4  # 1 (VAR) + 2 (VAR) + (2 - 1)
 
 
 def test_enumerator() -> None:

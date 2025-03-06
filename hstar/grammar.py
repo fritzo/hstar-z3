@@ -91,7 +91,7 @@ class JoinTerm(metaclass=HashConsMeta):
             return "BOT"
         if len(self.parts) == 1:
             return repr(next(iter(self.parts)))
-        return f"JOIN({', '.join(map(repr, self.parts))})"
+        return f"JOIN({', '.join(sorted(map(repr, self.parts)))})"
 
 
 def _JOIN(*parts: Term) -> JoinTerm:
@@ -310,12 +310,25 @@ def _complexity(term: Term) -> int:
 
 
 def complexity(term: JoinTerm) -> int:
-    """Complexity of a term."""
+    """
+    Complexity of a term.
+
+    This satisfies the compositionality condition
+    ```
+    complexity(JOIN(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
+    ```
+    But due to eager linear reduction, this does not satisfy the
+    compositionality conditions
+    ```
+    complexity(APP(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
+    complexity(LAM(term)) <= 1 + complexity(term)
+    ```
+    because those may result in more complex JOIN terms. However it this does
+    satisfy that any term can be constructed from strictly simpler terms.
+    """
     if not term.parts:
         return 1
-    if len(term.parts) == 1:
-        return _complexity(next(iter(term.parts)))
-    return 1 + max(_complexity(part) for part in term.parts)
+    return sum(map(_complexity, term.parts)) + len(term.parts) - 1
 
 
 class Enumerator:
@@ -343,32 +356,23 @@ class Enumerator:
         if c == 1:
             self._add_term(BOT)
             self._add_term(TOP)
-        # complexity(VAR(n)) = 1 + n
         self._add_term(VAR(c - 1))
 
         # Add LAM terms.
-        # complexity(LAM(term)) <= 1 + complexity(term)
-        for term in self._get_level(c - 1):
+        for term in self._levels[c - 1]:
             self._add_term(LAM(term))
 
-        # Add APP terms.
-        # complexity(APP(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
-        for c_lhs in range(1, c):
+        # Add APP and JOIN terms.
+        for c_lhs in range(1, c - 1):
             c_rhs = c - c_lhs - 1
-            lhs_level = self._get_level(c_lhs)
-            rhs_level = self._get_level(c_rhs)
-            for lhs, rhs in itertools.product(lhs_level, rhs_level):
-                self._add_term(APP(lhs, rhs))
-
-        # Add JOIN terms.
-        # complexity(JOIN(lhs, rhs)) <= 1 + max(complexity(lhs), complexity(rhs))
-        lhs_level = self._get_level(c - 1)
-        for c_rhs in range(1, c):
-            rhs_level = self._get_level(c_rhs)
-            for lhs, rhs in itertools.product(lhs_level, rhs_level):
-                self._add_term(JOIN(lhs, rhs))
+            for lhs in self._levels[c_lhs]:
+                for rhs in self._levels[c_rhs]:
+                    self._add_term(APP(lhs, rhs))
+                    self._add_term(JOIN(lhs, rhs))
 
     def _add_term(self, term: JoinTerm) -> None:
         c = complexity(term)
-        assert c < len(self._levels)
-        self._levels[c].add(term)
+        if c < len(self._levels):
+            self._levels[c].add(term)
+        # Otherwise linear reduction has produced a more complex term that we
+        # will discard here but reconstruct later.
