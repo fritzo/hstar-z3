@@ -28,7 +28,7 @@ def max_vars(*args: Map[int, int]) -> Map[int, int]:
     for a in args[1:]:
         for k, v in a.items():
             result[k] = max(result.get(k, 0), v)
-    return Map(result)
+    return intern(Map(result))
 
 
 @cache
@@ -37,7 +37,7 @@ def add_vars(a: Map[int, int], b: Map[int, int]) -> Map[int, int]:
     result = dict(a)
     for k, v in b.items():
         result[k] = result.get(k, 0) + v
-    return Map(result)
+    return intern(Map(result))
 
 
 class TermType(Enum):
@@ -105,10 +105,8 @@ def _JOIN_cached(parts: frozenset[_Term]) -> Term:
     # Eagerly linearly reduce.
     if _TOP in parts and len(parts) > 1:
         parts = frozenset((_TOP,))
-    return Term(
-        parts,
-        free_vars=max_vars(*(a.free_vars for a in parts)),
-    )
+    free_vars = max_vars(*(a.free_vars for a in parts))
+    return Term(parts, free_vars=free_vars)
 
 
 def JOIN(*args: Term) -> Term:
@@ -137,6 +135,7 @@ def _APP(head: _Term, body: Term) -> Term:
         return _JOIN(head.head)
     if head.typ == TermType.ABS1:
         assert head.head is not None
+        # FIXME shift body, then shift result
         return _subst(head.head, Map({0: body}))
     # Construct.
     arg = _Term(
@@ -158,28 +157,26 @@ def APP(head: Term, body: Term) -> Term:
 
 
 def _ABS0(head: _Term) -> _Term:
-    """Constant function."""
+    """Constant function, whose bound variable does not occur."""
     assert head.typ != TermType.TOP, "use LAM instead"
+    assert head.free_vars.get(0, 0) == 0, "use LAM instead"
     # Construct.
-    return _Term(
-        TermType.ABS0,
-        head=head,
-        free_vars=head.free_vars,
-    )
+    return _Term(TermType.ABS0, head=head, free_vars=head.free_vars)
 
 
 @cache
 def _ABS1(head: _Term) -> _Term:
-    """Linear function."""
+    """Linear function, whose bound variable occurs exactly once."""
     assert head.typ != TermType.TOP, "use LAM instead"
     assert head.free_vars.get(0, 0) == 1, "use LAM instead"
     # Construct.
-    return _Term(TermType.ABS1, head=head, free_vars=head.free_vars)
+    free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
+    return _Term(TermType.ABS1, head=head, free_vars=free_vars)
 
 
 @cache
 def _ABS(head: _Term) -> _Term:
-    """Nonlinear function."""
+    """Nonlinear function, whose bound variable occurs at least twice."""
     assert head.typ != TermType.TOP, "use LAM instead"
     assert head.free_vars.get(0, 0) > 1, "use LAM instead"
     # Construct.
@@ -191,6 +188,7 @@ def _LAM(head: _Term) -> _Term:
     """Lambda abstraction."""
     occurrences = head.free_vars.get(0, 0)
     if occurrences == 0:
+        # FIXME unshift head
         return _ABS0(head)
     if occurrences == 1:
         return _ABS1(head)
@@ -208,14 +206,15 @@ def LAM(head: Term) -> Term:
 
 @cache
 def _VAR(varname: int) -> _Term:
-    """Anonymous substitution variable."""
+    """Anonymous substitution variable for de Bruijn indexing."""
     assert varname >= 0
-    return _Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1}))
+    free_vars = intern(Map({varname: 1}))
+    return _Term(TermType.VAR, varname=varname, free_vars=free_vars)
 
 
 @cache
 def VAR(varname: int) -> Term:
-    """Anonymous substitution variable."""
+    """Anonymous substitution variable for de Bruijn indexing."""
     assert varname >= 0
     return _JOIN(_VAR(varname))
 

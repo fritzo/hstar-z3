@@ -148,7 +148,6 @@ def test_subst() -> None:
     assert subst(APP(VAR(0), JOIN(VAR(1))), Map()) is APP(VAR(0), JOIN(VAR(1)))
 
 
-@pytest.mark.xfail(reason="TODO")
 def test_lam() -> None:
     """Test that the LAM operation works correctly with hash consing."""
     # Test basic lambda abstraction
@@ -181,21 +180,21 @@ def test_lam() -> None:
 @pytest.mark.xfail(reason="TODO")
 def test_eager_linear_reduction() -> None:
     # JOIN reduction
-    assert JOIN(TOP) == TOP
-    assert JOIN(BOT) == BOT
-    assert JOIN(VAR(0)) == VAR(0)
-    assert JOIN(VAR(0), VAR(0)) == VAR(0)
-    assert JOIN(VAR(0), VAR(1)) == JOIN(VAR(0), VAR(1))
-    assert JOIN(JOIN(VAR(0), VAR(1)), VAR(2)) == JOIN(VAR(0), VAR(1), VAR(2))
-    assert JOIN(VAR(0), JOIN(VAR(1), VAR(2))) == JOIN(VAR(0), VAR(1), VAR(2))
+    assert JOIN(TOP) is TOP
+    assert JOIN(BOT) is BOT
+    assert JOIN(VAR(0)) is VAR(0)
+    assert JOIN(VAR(0), VAR(0)) is VAR(0)
+    assert JOIN(VAR(0), VAR(1)) is JOIN(VAR(0), VAR(1))
+    assert JOIN(JOIN(VAR(0), VAR(1)), VAR(2)) is JOIN(VAR(0), VAR(1), VAR(2))
+    assert JOIN(VAR(0), JOIN(VAR(1), VAR(2))) is JOIN(VAR(0), VAR(1), VAR(2))
     assert JOIN(BOT, VAR(0)) is VAR(0)
     assert JOIN(TOP, VAR(0)) is TOP
 
     # Linear beta reduction
-    assert LAM(TOP) == TOP
-    assert LAM(BOT) == BOT
-    assert APP(LAM(VAR(1)), VAR(1)) == VAR(0)
-    assert APP(LAM(VAR(0)), VAR(1)) == VAR(1)
+    assert LAM(TOP) is TOP
+    assert LAM(BOT) is BOT
+    assert APP(LAM(VAR(1)), VAR(1)) is VAR(0)
+    assert APP(LAM(VAR(0)), VAR(1)) is VAR(1)
 
 
 def test_complexity() -> None:
