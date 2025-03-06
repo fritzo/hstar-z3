@@ -13,8 +13,8 @@ from hstar.grammar import (
     TOP,
     VAR,
     Enumerator,
-    Term,
     TermType,
+    _Term,
     complexity,
     shift,
     subst,
@@ -142,7 +142,7 @@ def test_lam_operation() -> None:
     lam0 = LAM(JOIN(VAR(0)))  # \x.x
     free_vars = Map({0: 1})
     assert lam0.parts == frozenset(
-        [Term(TermType.ABS1, head=Term(TermType.VAR, varname=0, free_vars=free_vars))]
+        [_Term(TermType.ABS1, head=_Term(TermType.VAR, varname=0, free_vars=free_vars))]
     )
 
     # Test that LAM correctly identifies different cases (ABS0, ABS1, ABS)

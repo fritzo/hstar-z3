@@ -50,14 +50,14 @@ class TermType(Enum):
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
-class Term(metaclass=HashConsMeta):
-    """Linear normal form."""
+class _Term(metaclass=HashConsMeta):
+    """A join-free linear normal form."""
 
     # Data.
     typ: TermType
     varname: int = 0  # For VAR.
-    head: "Term | None" = None
-    body: "JoinTerm | None" = None
+    head: "_Term | None" = None
+    body: "Term | None" = None
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
@@ -78,11 +78,11 @@ class Term(metaclass=HashConsMeta):
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
-class JoinTerm(metaclass=HashConsMeta):
-    """Join of terms in the Scott lattice."""
+class Term(metaclass=HashConsMeta):
+    """A linear normal form."""
 
     # Data.
-    parts: frozenset[Term]
+    parts: frozenset[_Term]
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
@@ -94,40 +94,40 @@ class JoinTerm(metaclass=HashConsMeta):
         return f"JOIN({', '.join(sorted(map(repr, self.parts)))})"
 
 
-def _JOIN(*parts: Term) -> JoinTerm:
+def _JOIN(*parts: _Term) -> Term:
     """Join of terms."""
     return _JOIN_cached(frozenset(parts))
 
 
 @cache
-def _JOIN_cached(parts: frozenset[Term]) -> JoinTerm:
+def _JOIN_cached(parts: frozenset[_Term]) -> Term:
     """Join of terms."""
     # Eagerly linearly reduce.
     if _TOP in parts and len(parts) > 1:
         parts = frozenset((_TOP,))
-    return JoinTerm(
+    return Term(
         parts,
         free_vars=max_vars(*(a.free_vars for a in parts)),
     )
 
 
-def JOIN(*args: JoinTerm) -> JoinTerm:
+def JOIN(*args: Term) -> Term:
     """Join of terms."""
-    parts: list[Term] = []
+    parts: list[_Term] = []
     for a in args:
         parts.extend(a.parts)
     return _JOIN(*parts)
 
 
-_TOP = Term(TermType.TOP)
-TOP: JoinTerm = _JOIN(_TOP)
+_TOP = _Term(TermType.TOP)
+TOP: Term = _JOIN(_TOP)
 """Top element of the Scott lattice."""
-BOT: JoinTerm = JOIN()
+BOT: Term = JOIN()
 """Bottom element of the Scott lattice."""
 
 
 @cache
-def _APP(head: Term, body: JoinTerm) -> JoinTerm:
+def _APP(head: _Term, body: Term) -> Term:
     """Application."""
     # Eagerly linearly reduce.
     if head is _TOP:
@@ -139,7 +139,7 @@ def _APP(head: Term, body: JoinTerm) -> JoinTerm:
         assert head.head is not None
         return _subst(head.head, 0, body)
     # Construct.
-    arg = Term(
+    arg = _Term(
         TermType.APP,
         head=head,
         body=body,
@@ -149,19 +149,19 @@ def _APP(head: Term, body: JoinTerm) -> JoinTerm:
 
 
 @cache
-def APP(head: JoinTerm, body: JoinTerm) -> JoinTerm:
+def APP(head: Term, body: Term) -> Term:
     """Application."""
-    args: list[Term] = []
+    args: list[_Term] = []
     for part in head.parts:
         args.extend(_APP(part, body).parts)
     return _JOIN(*args)
 
 
-def _ABS0(head: Term) -> Term:
+def _ABS0(head: _Term) -> _Term:
     """Constant function."""
     assert head.typ != TermType.TOP, "use LAM instead"
     # Construct.
-    return Term(
+    return _Term(
         TermType.ABS0,
         head=head,
         free_vars=head.free_vars,
@@ -169,25 +169,25 @@ def _ABS0(head: Term) -> Term:
 
 
 @cache
-def _ABS1(head: Term) -> Term:
+def _ABS1(head: _Term) -> _Term:
     """Linear function."""
     assert head.typ != TermType.TOP, "use LAM instead"
     assert head.free_vars.get(0, 0) == 1, "use LAM instead"
     # Construct.
-    return Term(TermType.ABS1, head=head, free_vars=head.free_vars)
+    return _Term(TermType.ABS1, head=head, free_vars=head.free_vars)
 
 
 @cache
-def _ABS(head: Term) -> Term:
+def _ABS(head: _Term) -> _Term:
     """Nonlinear function."""
     assert head.typ != TermType.TOP, "use LAM instead"
     assert head.free_vars.get(0, 0) > 1, "use LAM instead"
     # Construct.
     free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
-    return Term(TermType.ABS, head=head, free_vars=free_vars)
+    return _Term(TermType.ABS, head=head, free_vars=free_vars)
 
 
-def _LAM(head: Term) -> Term:
+def _LAM(head: _Term) -> _Term:
     """Lambda abstraction."""
     occurrences = head.free_vars.get(0, 0)
     if occurrences == 0:
@@ -197,7 +197,7 @@ def _LAM(head: Term) -> Term:
     return _ABS(head)
 
 
-def LAM(head: JoinTerm) -> JoinTerm:
+def LAM(head: Term) -> Term:
     """Lambda abstraction."""
     # Eagerly linearly reduce.
     if head is TOP:
@@ -207,27 +207,27 @@ def LAM(head: JoinTerm) -> JoinTerm:
 
 
 @cache
-def _VAR(varname: int) -> Term:
+def _VAR(varname: int) -> _Term:
     """Anonymous substitution variable."""
     assert varname >= 0
-    return Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1}))
+    return _Term(TermType.VAR, varname=varname, free_vars=Map({varname: 1}))
 
 
 @cache
-def VAR(varname: int) -> JoinTerm:
+def VAR(varname: int) -> Term:
     """Anonymous substitution variable."""
     assert varname >= 0
     return _JOIN(_VAR(varname))
 
 
 @cache
-def _shift(term: Term, start: int = 0) -> Term:
+def _shift(term: _Term, start: int = 0) -> _Term:
     """Increment all free VARs in a."""
     if all(v < start for v in term.free_vars):
         return term
     if term.typ == TermType.VAR:
         assert term.varname >= start
-        return Term(
+        return _Term(
             TermType.VAR, varname=term.varname + 1, free_vars=Map({term.varname + 1: 1})
         )
     if term.typ == TermType.APP:
@@ -251,7 +251,7 @@ def _shift(term: Term, start: int = 0) -> Term:
 
 
 @cache
-def _subst(term: Term, old: int, new: JoinTerm) -> JoinTerm:
+def _subst(term: _Term, old: int, new: Term) -> Term:
     """Substitute a VAR v := b in a."""
     if term.free_vars.get(old, 0) == 0:
         return _JOIN(term)
@@ -276,18 +276,18 @@ def _subst(term: Term, old: int, new: JoinTerm) -> JoinTerm:
 
 
 @cache
-def shift(term: JoinTerm, start: int = 0) -> JoinTerm:
+def shift(term: Term, start: int = 0) -> Term:
     """Increment all free VARs in a JoinTerm."""
     return _JOIN(*(_shift(part, start) for part in term.parts))
 
 
 @cache
-def subst(term: JoinTerm, old: int, new: JoinTerm) -> JoinTerm:
+def subst(term: Term, old: int, new: Term) -> Term:
     """Substitute a VAR v := b in a JoinTerm."""
     return JOIN(*(_subst(part, old, new) for part in term.parts))
 
 
-def _complexity(term: Term) -> int:
+def _complexity(term: _Term) -> int:
     """Complexity of a term."""
     if term.typ == TermType.TOP:
         return 1
@@ -309,7 +309,7 @@ def _complexity(term: Term) -> int:
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
-def complexity(term: JoinTerm) -> int:
+def complexity(term: Term) -> int:
     """
     Complexity of a term.
 
@@ -335,15 +335,15 @@ class Enumerator:
     """Generator for all terms, sorted by complexity, then repr."""
 
     def __init__(self) -> None:
-        self._levels: list[set[JoinTerm]] = [set()]
+        self._levels: list[set[Term]] = [set()]
 
-    def __iter__(self) -> Iterator[JoinTerm]:
+    def __iter__(self) -> Iterator[Term]:
         for complexity in itertools.count():
             level = list(self._get_level(complexity))
             level.sort(key=repr)
             yield from level
 
-    def _get_level(self, complexity: int) -> set[JoinTerm]:
+    def _get_level(self, complexity: int) -> set[Term]:
         while len(self._levels) <= complexity:
             self._add_level()
         return self._levels[complexity]
@@ -370,9 +370,17 @@ class Enumerator:
                     self._add_term(APP(lhs, rhs))
                     self._add_term(JOIN(lhs, rhs))
 
-    def _add_term(self, term: JoinTerm) -> None:
+    def _add_term(self, term: Term) -> None:
         c = complexity(term)
         if c < len(self._levels):
             self._levels[c].add(term)
         # Otherwise linear reduction has produced a more complex term that we
         # will discard here but reconstruct later.
+
+
+def refines(special: Term, general: Term) -> bool:
+    """
+    Check whether a term `special` can be constructed from a term
+    `general` merely by substituting free variables.
+    """
+    raise NotImplementedError("TODO")
