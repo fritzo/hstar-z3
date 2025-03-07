@@ -13,8 +13,8 @@ lint: FORCE
 
 .PHONY: format
 format: FORCE
-	ruff check --fix .
 	black .
+	ruff check --fix .
 
 .PHONY: test
 test: lint FORCE

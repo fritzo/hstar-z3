@@ -2,6 +2,7 @@
 
 import itertools
 
+import pytest
 from immutables import Map
 
 from hstar.grammar import (
@@ -12,6 +13,9 @@ from hstar.grammar import (
     TOP,
     VAR,
     Enumerator,
+    EnvEnumerator,
+    RefinementEnumerator,
+    Term,
     TermType,
     _Term,
     complexity,
@@ -226,8 +230,29 @@ def test_complexity() -> None:
 
 
 def test_enumerator() -> None:
-    actual = list(itertools.islice(Enumerator(), 1000))
+    enumerator = Enumerator()
+    actual = list(itertools.islice(enumerator, 1000))
     # print("\n".join(str(x) for x in actual))
     expected = actual[:]
     expected.sort(key=lambda x: (complexity(x), repr(x)))
     assert actual == expected
+
+
+@pytest.mark.parametrize(
+    "keys", [frozenset([0]), frozenset([0, 1]), frozenset([0, 1, 2])]
+)
+def test_env_enumerator(keys: frozenset[int]) -> None:
+    enumerator = EnvEnumerator(keys)
+    actual = list(itertools.islice(enumerator, 1000))
+    # print("\n".join(str(x) for x in actual))
+    for env in actual:
+        assert isinstance(env, Map)
+        assert set(env.keys()) <= keys
+
+
+def test_refinement_enumerator() -> None:
+    sketch = LAM(APP(APP(VAR(0), VAR(1)), VAR(2)))
+    enumerator = RefinementEnumerator(sketch)
+    actual = list(itertools.islice(enumerator, 1000))
+    # print("\n".join(str(x) for x in actual))
+    assert all(isinstance(x, Term) for x in actual)

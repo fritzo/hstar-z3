@@ -14,7 +14,7 @@ from functools import cache
 
 from immutables import Map
 
-from .util import HashConsMeta, intern
+from .util import HashConsMeta, intern, partitions
 
 EMPTY_VARS: Map[int, int] = Map()
 
@@ -343,6 +343,11 @@ def complexity(term: Term) -> int:
     return sum(map(_complexity, term.parts)) + len(term.parts) - 1
 
 
+def env_complexity(env: Env) -> int:
+    """Complexity of an environment."""
+    return sum(complexity(term) for term in env.values())
+
+
 class Enumerator:
     """Generator for all terms, sorted by complexity, then repr."""
 
@@ -351,7 +356,11 @@ class Enumerator:
 
     def __iter__(self) -> Iterator[Term]:
         for complexity in itertools.count():
-            yield from sorted(self._get_level(complexity), key=repr)
+            yield from self.level(complexity)
+
+    def level(self, c: int) -> Iterator[Term]:
+        """Iterate over terms of a given complexity."""
+        return iter(sorted(self._get_level(c), key=repr))
 
     def _get_level(self, complexity: int) -> set[Term]:
         while len(self._levels) <= complexity:
@@ -387,6 +396,65 @@ class Enumerator:
             # will discard here but reconstruct later.
             return
         self._levels[c].add(term)
+
+
+class EnvEnumerator:
+    """Generator for all environments, sorted by complexity, then repr."""
+
+    def __init__(self, keys: frozenset[int]) -> None:
+        self._keys = keys
+        self._enumerator = Enumerator()
+        self._levels: list[set[Env]] = [set()]
+
+    def __iter__(self) -> Iterator[Env]:
+        for complexity in itertools.count():
+            yield from self.level(complexity)
+
+    def level(self, c: int) -> Iterator[Env]:
+        """Iterate over environments of a given complexity."""
+        return iter(sorted(self._get_level(c), key=repr))
+
+    def _get_level(self, complexity: int) -> set[Env]:
+        while len(self._levels) <= complexity:
+            self._add_level()
+        return self._levels[complexity]
+
+    def _add_level(self) -> None:
+        self._levels.append(set())
+        c = len(self._levels) - 1
+
+        # Iterate over all partitions of c into len(self._keys) parts.
+        for partition in partitions(c, len(self._keys)):
+            factors = [self._enumerator.level(p) if p else [None] for p in partition]
+            for cs in itertools.product(*factors):
+                env = Map(
+                    (k, v)
+                    for k, v in zip(self._keys, cs, strict=True)
+                    if v is not None
+                    if v is not VAR(k)
+                )
+                self._levels[c].add(env)
+
+
+class RefinementEnumerator:
+    """
+    Generator for all refinements of a sketch, approximately sorted by complexity.
+
+    Each yielded refinement substitutes terms for free variables in the sketch.
+    """
+
+    def __init__(self, sketch: Term) -> None:
+        self._sketch = sketch
+        self._env_enumerator = EnvEnumerator(frozenset(sketch.free_vars))
+
+    def __iter__(self) -> Iterator[Term]:
+        seen: set[Term] = set()
+        for env in self._env_enumerator:
+            term = subst(self._sketch, env)
+            if term in seen:
+                continue
+            seen.add(term)
+            yield term
 
 
 class UnificationFailure(Exception):

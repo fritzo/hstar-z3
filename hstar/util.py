@@ -1,7 +1,7 @@
 import sys
 from abc import ABCMeta
 from collections import Counter
-from collections.abc import Hashable
+from collections.abc import Hashable, Iterator
 from typing import TypeVar
 from weakref import WeakKeyDictionary, ref
 
@@ -67,3 +67,13 @@ def boool_or(lhs: bool | None, rhs: bool | None) -> bool | None:
     if lhs is False and rhs is False:
         return False
     return None
+
+
+def partitions(total: int, num_parts: int) -> Iterator[tuple[int, ...]]:
+    """Generate all partitions of `total` into `num_parts`."""
+    if num_parts == 1:
+        yield (total,)
+        return
+    for i in range(total + 1):
+        for part in partitions(total - i, num_parts - 1):
+            yield (i,) + part
