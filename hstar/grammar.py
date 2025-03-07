@@ -368,12 +368,14 @@ class Enumerator:
         self._levels[c].add(term)
 
 
+enumerator = Enumerator()
+
+
 class EnvEnumerator:
     """Generator for all environments, sorted by complexity, then repr."""
 
     def __init__(self, keys: frozenset[int]) -> None:
         self._keys = keys
-        self._enumerator = Enumerator()
         self._levels: list[set[Env]] = [set()]
 
     def __iter__(self) -> Iterator[Env]:
@@ -392,10 +394,8 @@ class EnvEnumerator:
     def _add_level(self) -> None:
         self._levels.append(set())
         c = len(self._levels) - 1
-
-        # Iterate over all partitions of c into len(self._keys) parts.
         for partition in partitions(c, len(self._keys)):
-            factors = [self._enumerator.level(p) if p else [None] for p in partition]
+            factors = [enumerator.level(p) if p else [None] for p in partition]
             for cs in itertools.product(*factors):
                 env = Map(
                     (k, v)
@@ -404,6 +404,12 @@ class EnvEnumerator:
                     if v is not VAR(k)
                 )
                 self._levels[c].add(env)
+
+
+@cache
+def env_enumerator(keys: frozenset[int]) -> EnvEnumerator:
+    """Enumerator for all environments, sorted by complexity, then repr."""
+    return EnvEnumerator(keys)
 
 
 class RefinementEnumerator:
@@ -415,7 +421,7 @@ class RefinementEnumerator:
 
     def __init__(self, sketch: Term) -> None:
         self._sketch = sketch
-        self._env_enumerator = EnvEnumerator(frozenset(sketch.free_vars))
+        self._env_enumerator = env_enumerator(frozenset(sketch.free_vars))
 
     def __iter__(self) -> Iterator[Term]:
         seen: set[Term] = set()
@@ -427,13 +433,27 @@ class RefinementEnumerator:
             yield term
 
 
-class UnificationFailure(Exception):
-    """Raised when unification fails."""
-
-
-def refines(special: Term, general: Term) -> bool:
+class Refinery:
     """
-    Check whether a term `special` can be constructed from a term
-    `general` merely by substituting free variables.
+    Data structure representing the DAG of refinements of a sketch, together
+    with pairwise refinement edges `env : general -> special` between pairs of
+    terms.
     """
-    raise NotImplementedError("TODO")
+
+    def __init__(self, sketch: Term) -> None:
+        self._sketch = sketch
+        self._terms: set[Term] = set()
+        self._edges: dict[tuple[Term, Term], Env] = {}  # (special, general) -> env
+        self._heads: dict[Term, Term] = {}  # general -> special
+        self._tails: dict[Term, Term] = {}  # special -> general
+
+    def build(self, *, max_complexity: int) -> None:
+        """Build the DAG up to a given complexity."""
+        raise NotImplementedError("TODO")
+
+    def _add_edges(self, general: Term, *, max_complexity: int) -> None:
+        # Enumerate all refinements of general.
+        headroom = max_complexity - complexity(general)
+        if headroom <= 0:
+            return
+        raise NotImplementedError("TODO")
