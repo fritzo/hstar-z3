@@ -21,22 +21,23 @@ EMPTY_VARS: Map[int, int] = Map()
 
 @cache
 def max_vars(*args: Map[int, int]) -> Map[int, int]:
-    """Element-wise maximum of two maps of variables."""
+    """Element-wise maximum of multiple maps of variables."""
     if not args:
         return EMPTY_VARS
     result = dict(args[0])
-    for a in args[1:]:
-        for k, v in a.items():
+    for arg in args[1:]:
+        for k, v in arg.items():
             result[k] = max(result.get(k, 0), v)
     return intern(Map(result))
 
 
 @cache
-def add_vars(a: Map[int, int], b: Map[int, int]) -> Map[int, int]:
-    """Add two maps of variables."""
-    result = dict(a)
-    for k, v in b.items():
-        result[k] = result.get(k, 0) + v
+def add_vars(*args: Map[int, int]) -> Map[int, int]:
+    """Add multiple maps of variables."""
+    result = dict(args[0])
+    for arg in args[1:]:
+        for k, v in arg.items():
+            result[k] = result.get(k, 0) + v
     return intern(Map(result))
 
 
@@ -130,10 +131,10 @@ def _APP(head: _Term, body: Term) -> Term:
     if head.typ == TermType.LIN:
         assert head.head is not None
         # Shift body up to avoid variable capture, then substitute
-        shifted_body = shift(body, start=0, delta=1)
-        result = _subst(head.head, env=Map({0: shifted_body}))
+        body = shift(body, delta=1)
+        result = _subst(head.head, env=Map({0: body}))
         # Shift result down to account for the removed lambda
-        return shift(result, start=0, delta=-1)
+        return shift(result, delta=-1)
     # Construct.
     arg = _Term(
         TermType.APP,
@@ -176,9 +177,7 @@ def _ABS(head: _Term) -> _Term:
 def _LAM(head: _Term) -> _Term:
     """Lambda abstraction."""
     occurrences = head.free_vars.get(0, 0)
-    if occurrences <= 1:
-        return _LIN(head)
-    return _ABS(head)
+    return _LIN(head) if occurrences <= 1 else _ABS(head)
 
 
 def LAM(head: Term) -> Term:
@@ -265,7 +264,7 @@ def env_shift(env: Env, *, start: int = 0, delta: int = 1) -> Env:
             k += delta
         v = shift(v, start=start, delta=delta)
         result[k] = v
-    return Map(result)
+    return intern(Map(result))
 
 
 @cache
@@ -276,7 +275,6 @@ def _subst(term: _Term, env: Env) -> Term:
         return _JOIN(term)
 
     if term.typ == TermType.VAR:
-        # If variable is in environment, return its substitution
         if term.varname in env:
             return env[term.varname]
         return _JOIN(term)
@@ -290,10 +288,8 @@ def _subst(term: _Term, env: Env) -> Term:
 
     if term.typ in (TermType.LIN, TermType.ABS):
         assert term.head is not None
-        # Shift all terms in environment for lambda body
-        shifted_env = env_shift(env)
-        head_subst = _subst(term.head, shifted_env)
-        return LAM(head_subst)
+        head = _subst(term.head, env_shift(env))
+        return LAM(head)
 
     raise ValueError(f"unexpected term type: {term.typ}")
 
@@ -355,9 +351,7 @@ class Enumerator:
 
     def __iter__(self) -> Iterator[Term]:
         for complexity in itertools.count():
-            level = list(self._get_level(complexity))
-            level.sort(key=repr)
-            yield from level
+            yield from sorted(self._get_level(complexity), key=repr)
 
     def _get_level(self, complexity: int) -> set[Term]:
         while len(self._levels) <= complexity:
@@ -374,11 +368,11 @@ class Enumerator:
             self._add_term(TOP)
         self._add_term(VAR(c - 1))
 
-        # Add LAM terms.
+        # Add unary terms.
         for term in self._levels[c - 1]:
             self._add_term(LAM(term))
 
-        # Add APP and JOIN terms.
+        # Add binary terms.
         for c_lhs in range(1, c - 1):
             c_rhs = c - c_lhs - 1
             for lhs in self._levels[c_lhs]:
@@ -388,11 +382,11 @@ class Enumerator:
 
     def _add_term(self, term: Term) -> None:
         c = complexity(term)
-        if c < len(self._levels):
-            print(f"adding term {term}, complexity = {complexity(term)}")
-            self._levels[c].add(term)
-        # Otherwise linear reduction has produced a more complex term that we
-        # will discard here but reconstruct later.
+        if c >= len(self._levels):
+            # Eager linear reduction has produced a more complex term that we
+            # will discard here but reconstruct later.
+            return
+        self._levels[c].add(term)
 
 
 class UnificationFailure(Exception):
