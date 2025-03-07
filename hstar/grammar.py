@@ -157,9 +157,11 @@ def APP(head: Term, body: Term) -> Term:
 
 
 def _ABS0(head: _Term) -> _Term:
-    """Constant function, whose bound variable does not occur."""
+    """
+    Constant function, whose bound variable does not occur.
+    This is an optimization allowing the `head` term to avoid shifting.
+    """
     assert head.typ != TermType.TOP, "use LAM instead"
-    assert head.free_vars.get(0, 0) == 0, "use LAM instead"
     # Construct.
     return _Term(TermType.ABS0, head=head, free_vars=head.free_vars)
 
@@ -188,8 +190,9 @@ def _LAM(head: _Term) -> _Term:
     """Lambda abstraction."""
     occurrences = head.free_vars.get(0, 0)
     if occurrences == 0:
-        # FIXME unshift head
-        return _ABS0(head)
+        # Unshift head since _ABS0 is designed to skip shifting
+        unshifted_head = _shift(head, start=1, delta=-1)
+        return _ABS0(unshifted_head)
     if occurrences == 1:
         return _ABS1(head)
     return _ABS(head)
@@ -224,48 +227,63 @@ EMPTY_ENV: Env = Map()
 
 
 @cache
-def _shift(term: _Term, start: int = 0) -> _Term:
-    """Increment all free VARs in a."""
+def _shift(term: _Term, start: int = 0, delta: int = 1) -> _Term:
+    """
+    Shift all free VARs in term by delta.
+
+    Increments (delta > 0) or decrements (delta < 0) all free variables
+    with indices >= start by abs(delta).
+    """
     if all(v < start for v in term.free_vars):
         return term
     if term.typ == TermType.VAR:
         assert term.varname >= start
-        return _Term(
-            TermType.VAR, varname=term.varname + 1, free_vars=Map({term.varname + 1: 1})
-        )
+        varname = term.varname + delta
+        free_vars = intern(Map({varname: 1}))
+        return _Term(TermType.VAR, varname=varname, free_vars=free_vars)
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
-        head = _shift(term.head, start)
-        body = shift(term.body, start)  # Use shift on the body instead of substitution
+        head = _shift(term.head, start, delta)
+        body = shift(term.body, start, delta)
         parts = _APP(head, body).parts
         assert len(parts) == 1
         return next(iter(parts))
     if term.typ == TermType.ABS0:
         assert term.head is not None
-        return _ABS0(_shift(term.head, start))
+        return _ABS0(_shift(term.head, start, delta))
     if term.typ == TermType.ABS1:
         assert term.head is not None
-        return _ABS1(_shift(term.head, start + 1))
+        return _ABS1(_shift(term.head, start + 1, delta))
     if term.typ == TermType.ABS:
         assert term.head is not None
-        return _ABS(_shift(term.head, start + 1))
+        return _ABS(_shift(term.head, start + 1, delta))
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @cache
-def shift(term: Term, start: int = 0) -> Term:
-    """Increment all free VARs in a JoinTerm."""
-    return _JOIN(*(_shift(part, start) for part in term.parts))
+def shift(term: Term, start: int = 0, delta: int = 1) -> Term:
+    """
+    Shift all free VARs in a JoinTerm by delta.
+
+    Increments (delta > 0) or decrements (delta < 0) all free variables
+    with indices >= start by abs(delta).
+    """
+    return _JOIN(*(_shift(part, start, delta) for part in term.parts))
 
 
-def env_shift(env: Env, start: int = 0) -> Env:
-    """Increment all free VARs in an Env."""
+def env_shift(env: Env, start: int = 0, delta: int = 1) -> Env:
+    """
+    Shift all free VARs in an Env by delta.
+
+    Increments (delta > 0) or decrements (delta < 0) all free variables
+    with indices >= start by abs(delta).
+    """
     result: dict[int, Term] = {}
     for k, v in env.items():
         if k >= start:
-            k += 1
-        v = shift(v, start)
+            k += delta
+        v = shift(v, start, delta)
         result[k] = v
     return Map(result)
 
