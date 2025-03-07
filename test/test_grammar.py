@@ -6,10 +6,10 @@ import pytest
 from immutables import Map
 
 from hstar.grammar import (
+    ABS,
     APP,
     BOT,
     JOIN,
-    LAM,
     TOP,
     VAR,
     Enumerator,
@@ -44,9 +44,9 @@ def test_hash_consing() -> None:
     # Test that different terms are different objects
     assert VAR(0) is not VAR(1)
 
-    # Test LAM hash consing
-    lambda_term1 = LAM(JOIN(VAR(0)))
-    lambda_term2 = LAM(JOIN(VAR(0)))
+    # Test ABS hash consing
+    lambda_term1 = ABS(JOIN(VAR(0)))
+    lambda_term2 = ABS(JOIN(VAR(0)))
     assert lambda_term1 is lambda_term2
 
     # Test that TOP absorbs other terms in a join
@@ -69,12 +69,12 @@ def test_shift() -> None:
     assert shift(BOT) is BOT
 
     # Test shifting of lambda terms
-    lam_var0 = LAM(JOIN(VAR(0)))
+    lam_var0 = ABS(JOIN(VAR(0)))
     assert shift(lam_var0) is lam_var0  # Bound variable, shouldn't change
 
     # Test that free variables in abstractions are correctly shifted
-    lam_with_free = LAM(JOIN(VAR(1)))  # \x.y
-    assert shift(lam_with_free) is LAM(JOIN(VAR(2)))  # \x.z
+    lam_with_free = ABS(JOIN(VAR(1)))  # \x.y
+    assert shift(lam_with_free) is ABS(JOIN(VAR(2)))  # \x.z
 
     # Test application shift
     app_term = APP(VAR(0), JOIN(VAR(1)))
@@ -102,7 +102,7 @@ def test_subst() -> None:
     assert actual is JOIN(VAR(2), VAR(3))
 
     # Identity function substitution
-    id_term = LAM(JOIN(VAR(0)))  # \x.x
+    id_term = ABS(JOIN(VAR(0)))  # \x.x
     assert subst(id_term, Map({0: TOP})) is id_term  # [TOP/0](\x.x) = \x.x
     assert subst(id_term, Map({1: TOP})) is id_term  # [TOP/1](\x.x) = \x.x
 
@@ -122,16 +122,16 @@ def test_subst() -> None:
 
     # Nested abstraction substitution
     # \x.1 x
-    nested = LAM(JOIN(APP(VAR(1), JOIN(VAR(0)))))
+    nested = ABS(JOIN(APP(VAR(1), JOIN(VAR(0)))))
     # [TOP/1](\x.1 x)
     assert subst(nested, Map({0: TOP})) is TOP
 
     # More complex substitution cases
-    complex_term = LAM(APP(VAR(0), APP(VAR(1), VAR(2))))  # \x. x (1 2)
+    complex_term = ABS(APP(VAR(0), APP(VAR(1), VAR(2))))  # \x. x (1 2)
     # When substituting for var 1
     actual = subst(complex_term, Map({0: TOP}))
     # Expected: \x. x (TOP 2)
-    expected = LAM(APP(VAR(0), TOP))
+    expected = ABS(APP(VAR(0), TOP))
     assert actual is expected
 
     # Join substitution
@@ -151,33 +151,32 @@ def test_subst() -> None:
     assert subst(APP(VAR(0), JOIN(VAR(1))), Map()) is APP(VAR(0), JOIN(VAR(1)))
 
 
-def test_lam() -> None:
-    """Test that the LAM operation works correctly with hash consing."""
+def test_abs() -> None:
+    """Test that the ABS operation works correctly with hash consing."""
     # Test basic lambda abstraction
-    lam0 = LAM(JOIN(VAR(0)))  # \x.x
+    lam0 = ABS(JOIN(VAR(0)))  # \x.x
     free_vars = Map({0: 1})
     assert lam0.parts == frozenset(
-        [_Term(TermType.LIN, head=_Term(TermType.VAR, varname=0, free_vars=free_vars))]
+        [_Term(TermType.ABS, head=_Term(TermType.VAR, varname=0, free_vars=free_vars))]
     )
 
-    # Test that LAM correctly identifies different cases (LIN, ABS)
-    # LIN - zero occurrences
-    lam_constant = LAM(JOIN(VAR(1)))  # \x.y
-    assert list(lam_constant.parts)[0].typ == TermType.LIN
+    # zero occurrences
+    lam_constant = ABS(JOIN(VAR(1)))  # \x.y
+    assert list(lam_constant.parts)[0].typ == TermType.ABS
 
-    # LIN - one occurrence
-    lam_linear = LAM(JOIN(VAR(0)))  # \x.x
-    assert list(lam_linear.parts)[0].typ == TermType.LIN
+    # one occurrence
+    lam_linear = ABS(JOIN(VAR(0)))  # \x.x
+    assert list(lam_linear.parts)[0].typ == TermType.ABS
 
-    # ABS - two or more occurrences
-    lam_nonlinear = LAM(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
+    # two or more occurrences
+    lam_nonlinear = ABS(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
     assert list(lam_nonlinear.parts)[0].typ == TermType.ABS
 
-    # Test that LAM is idempotent with hash consing
-    assert LAM(JOIN(VAR(0))) is LAM(JOIN(VAR(0)))
+    # Test that ABS is idempotent with hash consing
+    assert ABS(JOIN(VAR(0))) is ABS(JOIN(VAR(0)))
 
-    # Test that LAM(TOP) is TOP
-    assert LAM(TOP) is TOP
+    # Test that ABS(TOP) is TOP
+    assert ABS(TOP) is TOP
 
 
 def test_eager_linear_reduction() -> None:
@@ -193,10 +192,10 @@ def test_eager_linear_reduction() -> None:
     assert JOIN(TOP, VAR(0)) is TOP
 
     # Linear beta reduction
-    assert LAM(TOP) is TOP
-    assert LAM(BOT) is BOT
-    assert APP(LAM(VAR(1)), VAR(1)) is VAR(0)
-    assert APP(LAM(VAR(0)), VAR(1)) is VAR(1)
+    assert ABS(TOP) is TOP
+    assert ABS(BOT) is BOT
+    assert APP(ABS(VAR(1)), VAR(1)) is VAR(0)
+    assert APP(ABS(VAR(0)), VAR(1)) is VAR(1)
 
 
 def test_complexity() -> None:
@@ -213,11 +212,11 @@ def test_complexity() -> None:
     assert complexity(app_term) == 4  # 1 (APP) + 1 (VAR) + 2 (VAR)
 
     # Test complexity of lambda terms
-    id_term = LAM(VAR(0))  # λx.x
-    assert complexity(id_term) == 2  # 1 (LIN) + 1 (VAR)
+    id_term = ABS(VAR(0))  # λx.x
+    assert complexity(id_term) == 2  # 1 (ABS) + 1 (VAR)
 
-    const_term = LAM(VAR(1))  # λx.y
-    assert complexity(const_term) == 3  # 2 (LIN) + 1 (VAR)
+    const_term = ABS(VAR(1))  # λx.y
+    assert complexity(const_term) == 3  # 2 (ABS) + 1 (VAR)
 
     # Test complexity of nested applications
     nested_app = APP(VAR(0), APP(VAR(1), VAR(2)))
@@ -251,7 +250,7 @@ def test_env_enumerator(keys: frozenset[int]) -> None:
 
 
 def test_refinement_enumerator() -> None:
-    sketch = LAM(APP(APP(VAR(0), VAR(1)), VAR(2)))
+    sketch = ABS(APP(APP(VAR(0), VAR(1)), VAR(2)))
     enumerator = RefinementEnumerator(sketch)
     actual = list(itertools.islice(enumerator, 1000))
     # print("\n".join(str(x) for x in actual))

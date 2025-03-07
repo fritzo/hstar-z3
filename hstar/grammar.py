@@ -43,10 +43,9 @@ def add_vars(*args: Map[int, int]) -> Map[int, int]:
 
 class TermType(Enum):
     TOP = 0  # by contrast BOT is simply a nullary JOIN
-    APP = 1
-    LIN = 2  # one occurrence of the bound variable
-    ABS = 3  # two or more occurrences of the bound variable
-    VAR = 4
+    VAR = 1
+    ABS = 2
+    APP = 3
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -68,8 +67,6 @@ class _Term(metaclass=HashConsMeta):
             return f"VAR({self.varname})"
         if self.typ == TermType.APP:
             return f"APP({self.head}, {self.body})"
-        if self.typ == TermType.LIN:
-            return f"LIN({self.head})"
         if self.typ == TermType.ABS:
             return f"ABS({self.head})"
         raise ValueError(f"unexpected term type: {self.typ}")
@@ -123,18 +120,51 @@ BOT: Term = JOIN()
 
 
 @cache
+def _VAR(varname: int) -> _Term:
+    """Anonymous substitution variable for de Bruijn indexing."""
+    assert varname >= 0
+    free_vars = intern(Map({varname: 1}))
+    return _Term(TermType.VAR, varname=varname, free_vars=free_vars)
+
+
+@cache
+def VAR(varname: int) -> Term:
+    """Anonymous substitution variable for de Bruijn indexing."""
+    assert varname >= 0
+    return _JOIN(_VAR(varname))
+
+
+@cache
+def _ABS(head: _Term) -> _Term:
+    """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
+    assert head.typ != TermType.TOP, "use ABS instead"
+    # Construct.
+    free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
+    return _Term(TermType.ABS, head=head, free_vars=free_vars)
+
+
+@cache
+def ABS(head: Term) -> Term:
+    """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
+    # Eagerly linearly reduce.
+    if head is TOP:
+        return TOP  # Since \x.TOP = TOP.
+    # Construct.
+    return _JOIN(*(_ABS(part) for part in head.parts))
+
+
+@cache
 def _APP(head: _Term, body: Term) -> Term:
     """Application."""
     # Eagerly linearly reduce.
     if head is _TOP:
         return TOP
-    if head.typ == TermType.LIN:
+    if head.typ == TermType.ABS:
         assert head.head is not None
-        # Shift body up to avoid variable capture, then substitute
-        body = shift(body, delta=1)
-        result = _subst(head.head, env=Map({0: body}))
-        # Shift result down to account for the removed lambda
-        return shift(result, delta=-1)
+        if head.head.free_vars.get(0, 0) <= 1:
+            body = shift(body, delta=1)
+            result = _subst(head.head, env=Map({0: body}))
+            return shift(result, delta=-1)
     # Construct.
     arg = _Term(
         TermType.APP,
@@ -152,56 +182,6 @@ def APP(head: Term, body: Term) -> Term:
     for part in head.parts:
         args.extend(_APP(part, body).parts)
     return _JOIN(*args)
-
-
-@cache
-def _LIN(head: _Term) -> _Term:
-    """Linear function, whose bound variable occurs at most once."""
-    assert head.typ != TermType.TOP, "use LAM instead"
-    assert head.free_vars.get(0, 0) <= 1, "use LAM instead"
-    # Construct.
-    free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
-    return _Term(TermType.LIN, head=head, free_vars=free_vars)
-
-
-@cache
-def _ABS(head: _Term) -> _Term:
-    """Nonlinear function, whose bound variable occurs at least twice."""
-    assert head.typ != TermType.TOP, "use LAM instead"
-    assert head.free_vars.get(0, 0) > 1, "use LAM instead"
-    # Construct.
-    free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
-    return _Term(TermType.ABS, head=head, free_vars=free_vars)
-
-
-def _LAM(head: _Term) -> _Term:
-    """Lambda abstraction."""
-    occurrences = head.free_vars.get(0, 0)
-    return _LIN(head) if occurrences <= 1 else _ABS(head)
-
-
-def LAM(head: Term) -> Term:
-    """Lambda abstraction."""
-    # Eagerly linearly reduce.
-    if head is TOP:
-        return TOP  # Since \x.TOP = TOP.
-    # Construct.
-    return _JOIN(*(_LAM(part) for part in head.parts))
-
-
-@cache
-def _VAR(varname: int) -> _Term:
-    """Anonymous substitution variable for de Bruijn indexing."""
-    assert varname >= 0
-    free_vars = intern(Map({varname: 1}))
-    return _Term(TermType.VAR, varname=varname, free_vars=free_vars)
-
-
-@cache
-def VAR(varname: int) -> Term:
-    """Anonymous substitution variable for de Bruijn indexing."""
-    assert varname >= 0
-    return _JOIN(_VAR(varname))
 
 
 Env = Map[int, Term]
@@ -223,6 +203,9 @@ def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
         varname = term.varname + delta
         free_vars = intern(Map({varname: 1}))
         return _Term(TermType.VAR, varname=varname, free_vars=free_vars)
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return _ABS(_shift(term.head, start=start + 1, delta=delta))
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
@@ -231,12 +214,6 @@ def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
         parts = _APP(head=head, body=body).parts
         assert len(parts) == 1
         return next(iter(parts))
-    if term.typ == TermType.LIN:
-        assert term.head is not None
-        return _LIN(_shift(term.head, start=start + 1, delta=delta))
-    if term.typ == TermType.ABS:
-        assert term.head is not None
-        return _ABS(_shift(term.head, start=start + 1, delta=delta))
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
@@ -273,24 +250,20 @@ def _subst(term: _Term, env: Env) -> Term:
     # Check if term has any free variables that are in the environment
     if not any(k in term.free_vars for k in env):
         return _JOIN(term)
-
     if term.typ == TermType.VAR:
         if term.varname in env:
             return env[term.varname]
         return _JOIN(term)
-
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        head = _subst(term.head, env_shift(env))
+        return ABS(head)
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
         head = _subst(term.head, env)
         body = subst(term.body, env)
         return APP(head, body)
-
-    if term.typ in (TermType.LIN, TermType.ABS):
-        assert term.head is not None
-        head = _subst(term.head, env_shift(env))
-        return LAM(head)
-
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
@@ -308,16 +281,13 @@ def _complexity(term: _Term) -> int:
         return 1
     if term.typ == TermType.VAR:
         return 1 + term.varname
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return 1 + _complexity(term.head)
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
         return 1 + _complexity(term.head) + complexity(term.body)
-    if term.typ == TermType.LIN:
-        assert term.head is not None
-        return 1 + _complexity(term.head)
-    if term.typ == TermType.ABS:
-        assert term.head is not None
-        return 1 + _complexity(term.head)
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
@@ -333,7 +303,7 @@ def complexity(term: Term) -> int:
     compositionality conditions
     ```
     complexity(APP(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
-    complexity(LAM(term)) <= 1 + complexity(term)
+    complexity(ABS(term)) <= 1 + complexity(term)
     ```
     because those may result in more complex JOIN terms. However it this does
     satisfy that any term can be constructed from strictly simpler terms.
@@ -379,7 +349,7 @@ class Enumerator:
 
         # Add unary terms.
         for term in self._levels[c - 1]:
-            self._add_term(LAM(term))
+            self._add_term(ABS(term))
 
         # Add binary terms.
         for c_lhs in range(1, c - 1):
