@@ -2,7 +2,6 @@
 
 import itertools
 
-import pytest
 from immutables import Map
 
 from hstar.grammar import (
@@ -154,17 +153,17 @@ def test_lam() -> None:
     lam0 = LAM(JOIN(VAR(0)))  # \x.x
     free_vars = Map({0: 1})
     assert lam0.parts == frozenset(
-        [_Term(TermType.ABS1, head=_Term(TermType.VAR, varname=0, free_vars=free_vars))]
+        [_Term(TermType.LIN, head=_Term(TermType.VAR, varname=0, free_vars=free_vars))]
     )
 
-    # Test that LAM correctly identifies different cases (ABS0, ABS1, ABS)
-    # ABS0 - zero occurrences
+    # Test that LAM correctly identifies different cases (LIN, ABS)
+    # LIN - zero occurrences
     lam_constant = LAM(JOIN(VAR(1)))  # \x.y
-    assert list(lam_constant.parts)[0].typ == TermType.ABS0
+    assert list(lam_constant.parts)[0].typ == TermType.LIN
 
-    # ABS1 - one occurrence
+    # LIN - one occurrence
     lam_linear = LAM(JOIN(VAR(0)))  # \x.x
-    assert list(lam_linear.parts)[0].typ == TermType.ABS1
+    assert list(lam_linear.parts)[0].typ == TermType.LIN
 
     # ABS - two or more occurrences
     lam_nonlinear = LAM(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
@@ -211,10 +210,10 @@ def test_complexity() -> None:
 
     # Test complexity of lambda terms
     id_term = LAM(VAR(0))  # λx.x
-    assert complexity(id_term) == 2  # 1 (ABS1) + 1 (VAR)
+    assert complexity(id_term) == 2  # 1 (LIN) + 1 (VAR)
 
     const_term = LAM(VAR(1))  # λx.y
-    assert complexity(const_term) == 2  # 1 (ABS0) + 1 (VAR)
+    assert complexity(const_term) == 3  # 2 (LIN) + 1 (VAR)
 
     # Test complexity of nested applications
     nested_app = APP(VAR(0), APP(VAR(1), VAR(2)))
@@ -226,7 +225,6 @@ def test_complexity() -> None:
     assert complexity(join_term) == 4  # 1 (VAR) + 2 (VAR) + (2 - 1)
 
 
-@pytest.mark.xfail(reason="TODO")
 def test_enumerator() -> None:
     actual = list(itertools.islice(Enumerator(), 1000))
     # print("\n".join(str(x) for x in actual))

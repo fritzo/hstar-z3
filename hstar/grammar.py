@@ -43,10 +43,9 @@ def add_vars(a: Map[int, int], b: Map[int, int]) -> Map[int, int]:
 class TermType(Enum):
     TOP = 0  # by contrast BOT is simply a nullary JOIN
     APP = 1
-    ABS0 = 2  # zero occurrences of the bound variable
-    ABS1 = 3  # one occurrence of the bound variable
-    ABS = 4  # two or more occurrences of the bound variable
-    VAR = 5
+    LIN = 2  # one occurrence of the bound variable
+    ABS = 3  # two or more occurrences of the bound variable
+    VAR = 4
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -68,10 +67,8 @@ class _Term(metaclass=HashConsMeta):
             return f"VAR({self.varname})"
         if self.typ == TermType.APP:
             return f"APP({self.head}, {self.body})"
-        if self.typ == TermType.ABS0:
-            return f"ABS0({self.head})"
-        if self.typ == TermType.ABS1:
-            return f"ABS1({self.head})"
+        if self.typ == TermType.LIN:
+            return f"LIN({self.head})"
         if self.typ == TermType.ABS:
             return f"ABS({self.head})"
         raise ValueError(f"unexpected term type: {self.typ}")
@@ -130,10 +127,7 @@ def _APP(head: _Term, body: Term) -> Term:
     # Eagerly linearly reduce.
     if head is _TOP:
         return TOP
-    if head.typ == TermType.ABS0:
-        assert head.head is not None
-        return _JOIN(head.head)
-    if head.typ == TermType.ABS1:
+    if head.typ == TermType.LIN:
         assert head.head is not None
         # Shift body up to avoid variable capture, then substitute
         shifted_body = shift(body, start=0, delta=1)
@@ -159,24 +153,14 @@ def APP(head: Term, body: Term) -> Term:
     return _JOIN(*args)
 
 
-def _ABS0(head: _Term) -> _Term:
-    """
-    Constant function, whose bound variable does not occur.
-    This is an optimization allowing the `head` term to avoid shifting.
-    """
-    assert head.typ != TermType.TOP, "use LAM instead"
-    # Construct.
-    return _Term(TermType.ABS0, head=head, free_vars=head.free_vars)
-
-
 @cache
-def _ABS1(head: _Term) -> _Term:
-    """Linear function, whose bound variable occurs exactly once."""
+def _LIN(head: _Term) -> _Term:
+    """Linear function, whose bound variable occurs at most once."""
     assert head.typ != TermType.TOP, "use LAM instead"
-    assert head.free_vars.get(0, 0) == 1, "use LAM instead"
+    assert head.free_vars.get(0, 0) <= 1, "use LAM instead"
     # Construct.
     free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
-    return _Term(TermType.ABS1, head=head, free_vars=free_vars)
+    return _Term(TermType.LIN, head=head, free_vars=free_vars)
 
 
 @cache
@@ -192,12 +176,8 @@ def _ABS(head: _Term) -> _Term:
 def _LAM(head: _Term) -> _Term:
     """Lambda abstraction."""
     occurrences = head.free_vars.get(0, 0)
-    if occurrences == 0:
-        # Unshift head since _ABS0 is designed to skip shifting
-        unshifted_head = _shift(head, start=1, delta=-1)
-        return _ABS0(unshifted_head)
-    if occurrences == 1:
-        return _ABS1(head)
+    if occurrences <= 1:
+        return _LIN(head)
     return _ABS(head)
 
 
@@ -252,12 +232,9 @@ def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
         parts = _APP(head=head, body=body).parts
         assert len(parts) == 1
         return next(iter(parts))
-    if term.typ == TermType.ABS0:
+    if term.typ == TermType.LIN:
         assert term.head is not None
-        return _ABS0(_shift(term.head, start=start, delta=delta))
-    if term.typ == TermType.ABS1:
-        assert term.head is not None
-        return _ABS1(_shift(term.head, start=start + 1, delta=delta))
+        return _LIN(_shift(term.head, start=start + 1, delta=delta))
     if term.typ == TermType.ABS:
         assert term.head is not None
         return _ABS(_shift(term.head, start=start + 1, delta=delta))
@@ -311,13 +288,7 @@ def _subst(term: _Term, env: Env) -> Term:
         body = subst(term.body, env)
         return APP(head, body)
 
-    if term.typ == TermType.ABS0:
-        assert term.head is not None
-        # ABS0 doesn't need environment shifting since the bound variable doesn't occur
-        head_subst = _subst(term.head, env)
-        return LAM(head_subst)
-
-    if term.typ in (TermType.ABS1, TermType.ABS):
+    if term.typ in (TermType.LIN, TermType.ABS):
         assert term.head is not None
         # Shift all terms in environment for lambda body
         shifted_env = env_shift(env)
@@ -345,10 +316,7 @@ def _complexity(term: _Term) -> int:
         assert term.head is not None
         assert term.body is not None
         return 1 + _complexity(term.head) + complexity(term.body)
-    if term.typ == TermType.ABS0:
-        assert term.head is not None
-        return 1 + _complexity(term.head)
-    if term.typ == TermType.ABS1:
+    if term.typ == TermType.LIN:
         assert term.head is not None
         return 1 + _complexity(term.head)
     if term.typ == TermType.ABS:
@@ -421,6 +389,7 @@ class Enumerator:
     def _add_term(self, term: Term) -> None:
         c = complexity(term)
         if c < len(self._levels):
+            print(f"adding term {term}, complexity = {complexity(term)}")
             self._levels[c].add(term)
         # Otherwise linear reduction has produced a more complex term that we
         # will discard here but reconstruct later.
