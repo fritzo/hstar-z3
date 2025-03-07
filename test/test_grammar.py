@@ -57,9 +57,9 @@ def test_shift() -> None:
     assert shift(VAR(1)) is VAR(2)
 
     # Test shifting with a custom start point
-    assert shift(VAR(0), 1) is VAR(0)  # No shift, as index < starting_at
-    assert shift(VAR(1), 1) is VAR(2)  # Shift by 1, as index >= starting_at
-    assert shift(VAR(2), 2) is VAR(3)  # Only shift if index >= starting_at
+    assert shift(VAR(0), start=1) is VAR(0)  # No shift, as index < starting_at
+    assert shift(VAR(1), start=1) is VAR(2)  # Shift by 1, as index >= starting_at
+    assert shift(VAR(2), start=2) is VAR(3)  # Only shift if index >= starting_at
 
     # Test that TOP and BOT are invariant under shift
     assert shift(TOP) is TOP

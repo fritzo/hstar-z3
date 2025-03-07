@@ -135,8 +135,11 @@ def _APP(head: _Term, body: Term) -> Term:
         return _JOIN(head.head)
     if head.typ == TermType.ABS1:
         assert head.head is not None
-        # FIXME shift body, then shift result
-        return _subst(head.head, Map({0: body}))
+        # Shift body up to avoid variable capture, then substitute
+        shifted_body = shift(body, start=0, delta=1)
+        result = _subst(head.head, env=Map({0: shifted_body}))
+        # Shift result down to account for the removed lambda
+        return shift(result, start=0, delta=-1)
     # Construct.
     arg = _Term(
         TermType.APP,
@@ -202,7 +205,7 @@ def LAM(head: Term) -> Term:
     """Lambda abstraction."""
     # Eagerly linearly reduce.
     if head is TOP:
-        return TOP
+        return TOP  # Since \x.TOP = TOP.
     # Construct.
     return _JOIN(*(_LAM(part) for part in head.parts))
 
@@ -227,7 +230,7 @@ EMPTY_ENV: Env = Map()
 
 
 @cache
-def _shift(term: _Term, start: int = 0, delta: int = 1) -> _Term:
+def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
     """
     Shift all free VARs in term by delta.
 
@@ -244,35 +247,35 @@ def _shift(term: _Term, start: int = 0, delta: int = 1) -> _Term:
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
-        head = _shift(term.head, start, delta)
-        body = shift(term.body, start, delta)
-        parts = _APP(head, body).parts
+        head = _shift(term.head, start=start, delta=delta)
+        body = shift(term.body, start=start, delta=delta)
+        parts = _APP(head=head, body=body).parts
         assert len(parts) == 1
         return next(iter(parts))
     if term.typ == TermType.ABS0:
         assert term.head is not None
-        return _ABS0(_shift(term.head, start, delta))
+        return _ABS0(_shift(term.head, start=start, delta=delta))
     if term.typ == TermType.ABS1:
         assert term.head is not None
-        return _ABS1(_shift(term.head, start + 1, delta))
+        return _ABS1(_shift(term.head, start=start + 1, delta=delta))
     if term.typ == TermType.ABS:
         assert term.head is not None
-        return _ABS(_shift(term.head, start + 1, delta))
+        return _ABS(_shift(term.head, start=start + 1, delta=delta))
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @cache
-def shift(term: Term, start: int = 0, delta: int = 1) -> Term:
+def shift(term: Term, *, start: int = 0, delta: int = 1) -> Term:
     """
     Shift all free VARs in a JoinTerm by delta.
 
     Increments (delta > 0) or decrements (delta < 0) all free variables
     with indices >= start by abs(delta).
     """
-    return _JOIN(*(_shift(part, start, delta) for part in term.parts))
+    return _JOIN(*(_shift(part, start=start, delta=delta) for part in term.parts))
 
 
-def env_shift(env: Env, start: int = 0, delta: int = 1) -> Env:
+def env_shift(env: Env, *, start: int = 0, delta: int = 1) -> Env:
     """
     Shift all free VARs in an Env by delta.
 
@@ -283,7 +286,7 @@ def env_shift(env: Env, start: int = 0, delta: int = 1) -> Env:
     for k, v in env.items():
         if k >= start:
             k += delta
-        v = shift(v, start, delta)
+        v = shift(v, start=start, delta=delta)
         result[k] = v
     return Map(result)
 
