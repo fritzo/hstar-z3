@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 import z3
 
-from .enumeration import Refinery
+from .enumeration import Refiner
 from .grammar import Term
 from .solvers import add_theory, try_prove
 
@@ -27,14 +27,14 @@ class Synthesizer:
     def __init__(self, sketch: Term, constraint: Callable[[Term], z3.ExprRef]) -> None:
         self.sketch = sketch
         self.constraint = constraint
-        self.refinery = Refinery(sketch)
+        self.refiner = Refiner(sketch)
         self._solver = z3.Solver()
         add_theory(self._solver)
 
     def step(self) -> tuple[Term, bool | None]:
         """Generate the next candidate and check it."""
-        candidate = self.refinery.next_candidate()
+        candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
         valid, _ = try_prove(self._solver, constraint)
-        self.refinery.mark_valid(candidate, valid)
+        self.refiner.mark_valid(candidate, valid)
         return candidate, valid

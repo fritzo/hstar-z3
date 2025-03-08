@@ -23,12 +23,11 @@ from .grammar import (
     Env,
     Term,
     complexity,
-    env_complexity,
     env_compose,
     subst,
     subst_complexity,
 )
-from .util import partitions, weighted_partitions
+from .util import weighted_partitions
 
 
 class Enumerator:
@@ -91,45 +90,6 @@ enumerator = Enumerator()
 
 
 class EnvEnumerator:
-    """Generator for all environments, sorted by env_complexity, then repr."""
-
-    def __init__(self, keys: frozenset[int]) -> None:
-        self._keys = keys
-        self._levels: list[set[Env]] = [set()]
-
-    def __iter__(self) -> Iterator[Env]:
-        for c in itertools.count():
-            yield from self.level(c)
-
-    def level(self, c: int) -> Iterator[Env]:
-        """Iterates over environments of a given complexity."""
-        return iter(sorted(self._get_level(c), key=repr))
-
-    def _get_level(self, complexity: int) -> set[Env]:
-        while len(self._levels) <= complexity:
-            self._add_level()
-        return self._levels[complexity]
-
-    def _add_level(self) -> None:
-        self._levels.append(set())
-        c = len(self._levels) - 1
-        for partition in partitions(c, len(self._keys)):
-            factors = [enumerator.level(p) if p else [None] for p in partition]
-            for vs in itertools.product(*factors):
-                env = Map(
-                    (k, v) for k, v in zip(self._keys, vs, strict=True) if v is not None
-                )
-                assert env_complexity(env) == c
-                self._levels[-1].add(env)
-
-
-@cache
-def env_enumerator(keys: frozenset[int]) -> EnvEnumerator:
-    """Enumerator for all environments, sorted by env_complexity, then repr."""
-    return EnvEnumerator(keys)
-
-
-class SubstEnumerator:
     """Generator for all substitutions, sorted by subst_complexity, then repr."""
 
     def __init__(self, free_vars: Map[int, int]) -> None:
@@ -173,23 +133,22 @@ class SubstEnumerator:
 
 
 @cache
-def subst_enumerator(free_vars: Map[int, int]) -> SubstEnumerator:
+def env_enumerator(free_vars: Map[int, int]) -> EnvEnumerator:
     """Enumerator for all substitutions, sorted by subst_complexity, then repr."""
-    return SubstEnumerator(free_vars)
+    return EnvEnumerator(free_vars)
 
 
-class Refinery:
+class Refiner:
     """
-    Data structure representing the DAG of refinements of a sketch, together
-    with pairwise refinement edges `env : general -> special` between pairs of
-    terms.
+    Data structure representing the DAG of refinements of a term sketch,
+    propagating validity along general-special edges.
     """
 
     def __init__(self, sketch: Term) -> None:
         assert sketch.free_vars
         # Persistent state.
         self._sketch = sketch
-        self._terms: dict[Term, Env] = {sketch: Map()}  # term -> env
+        self._terms: dict[Term, Env] = {sketch: Map()}  # term -> substitution
         self._edges: dict[tuple[Term, Term], Env] = {}  # (special, general) -> env
         self._generalize: dict[Term, set[Term]] = {}  # special -> {general}
         self._specialize: dict[Term, set[Term]] = {}  # general -> {special}
@@ -215,15 +174,15 @@ class Refinery:
         """Grow the refinement DAG."""
         # Find a term to refine.
         if not self._growth_heap:
-            raise ValueError("Refinery is exhausted.")
+            raise ValueError("Refiner is exhausted.")
         c, general = heapq.heappop(self._growth_heap)
         if self._validity.get(general) is False:
             return
         heapq.heappush(self._growth_heap, (c + 1, general))
 
         # Specialize the term via every env of complexity c.
-        level = c - subst_enumerator(general.free_vars).baseline
-        for env in subst_enumerator(general.free_vars).level(level):
+        level = c - env_enumerator(general.free_vars).baseline
+        for env in env_enumerator(general.free_vars).level(level):
             special = subst(general, env)
             if special in self._terms:
                 continue
@@ -235,7 +194,7 @@ class Refinery:
             heapq.heappush(self._candidate_heap, special)
 
     def _grow_from(self, term: Term) -> None:
-        c = complexity(term) + subst_enumerator(term.free_vars).baseline
+        c = complexity(term) + env_enumerator(term.free_vars).baseline
         heapq.heappush(self._growth_heap, (c, term))
 
     def validate(self) -> None:
