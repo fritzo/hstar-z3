@@ -1,5 +1,3 @@
-"""Tests for the hstar/grammar.py module."""
-
 import itertools
 
 import pytest

@@ -1,5 +1,3 @@
-"""Tests for the hstar/grammar.py module."""
-
 from immutables import Map
 
 from hstar.grammar import (
