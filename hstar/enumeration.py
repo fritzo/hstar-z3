@@ -30,6 +30,9 @@ from .grammar import (
     subst_complexity,
 )
 from .itertools import weighted_partitions
+from .metrics import COUNTERS
+
+counter = COUNTERS[__name__]
 
 
 class Enumerator:
@@ -58,6 +61,7 @@ class Enumerator:
         return self._levels[complexity]
 
     def _add_level(self) -> None:
+        counter["enumerator.add_level"] += 1
         self._levels.append(set())
         c = len(self._levels) - 1
 
@@ -120,6 +124,7 @@ class EnvEnumerator:
         return self._levels[complexity]
 
     def _add_level(self) -> None:
+        counter["env_enumerator.add_level"] += 1
         self._levels.append(set())
         c = len(self._levels) - 1 + self._v_baseline
         for partition in weighted_partitions(c, self._weights):
@@ -173,6 +178,7 @@ class Refiner:
 
     def _grow(self) -> None:
         """Grow the refinement DAG."""
+        counter["refiner.grow"] += 1
         # Find a term to refine.
         if not self._growth_heap:
             raise StopIteration("Refiner is exhausted.")
@@ -253,6 +259,7 @@ class EnvRefiner:
 
     def _grow(self) -> None:
         """Grow the refinement DAG."""
+        counter["env_refiner.grow"] += 1
         # Find an environment to refine.
         if not self._growth_heap:
             raise StopIteration("EnvRefiner is exhausted.")
