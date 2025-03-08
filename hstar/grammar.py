@@ -192,6 +192,15 @@ def APP(head: Term, body: Term) -> Term:
     return _JOIN(*args)
 
 
+def app(*args: Term) -> Term:
+    """Chained application."""
+    assert args
+    result = args[0]
+    for arg in args[1:]:
+        result = APP(result, arg)
+    return result
+
+
 Env = Map[int, Term]
 EMPTY_ENV: Env = Map()
 
