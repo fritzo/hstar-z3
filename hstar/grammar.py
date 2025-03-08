@@ -69,6 +69,11 @@ class _Term(metaclass=HashConsMeta):
             return f"ABS({self.head})"
         raise ValueError(f"unexpected term type: {self.typ}")
 
+    def __lt__(self, other: "_Term") -> bool:
+        self_key = (_complexity(self), repr(self))
+        other_key = (_complexity(other), repr(other))
+        return self_key < other_key
+
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class Term(metaclass=HashConsMeta):
