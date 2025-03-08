@@ -1,10 +1,11 @@
 import pytest
 import z3
+from immutables import Map
 
 from hstar.bridge import py_to_z3
-from hstar.grammar import ABS, APP, VAR, Term, app
+from hstar.grammar import ABS, APP, VAR, Term, app, env_free_vars
 from hstar.solvers import LEQ
-from hstar.synthesis import Synthesizer
+from hstar.synthesis import EnvSynthesizer, Synthesizer
 
 
 @pytest.mark.xfail(reason="timeout")
@@ -22,4 +23,30 @@ def test_synthesizer() -> None:
     synthesizer = Synthesizer(sketch, constraint)
     for _ in range(100):
         candidate, valid = synthesizer.step()
+        # print(candidate)
         assert isinstance(candidate, Term)
+
+
+@pytest.mark.xfail(reason="timeout")
+@pytest.mark.timeout(0.1)
+def test_env_synthesizer() -> None:
+    sketch = Map(
+        {
+            0: ABS(ABS(ABS(app(VAR(2), VAR(0), VAR(1))))),  # pair
+            1: app(VAR(0), VAR(2), VAR(3)),  # <r,s>
+        }
+    )
+    assert env_free_vars(sketch) == Map({2: 1, 3: 1})
+
+    def constraint(candidate: Map[int, Term]) -> z3.ExprRef:
+        rs = candidate[1]
+        CB = ABS(ABS(ABS(APP(VAR(1), APP(VAR(2), VAR(0))))))
+        lhs = APP(rs, CB)
+        rhs = ABS(VAR(0))
+        return LEQ(py_to_z3(lhs), py_to_z3(rhs))
+
+    synthesizer = EnvSynthesizer(sketch, constraint)
+    for _ in range(100):
+        candidate, valid = synthesizer.step()
+        # print(candidate)
+        assert isinstance(candidate, Map)
