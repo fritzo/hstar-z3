@@ -1,0 +1,7 @@
+{
+  "makefile.configureOnOpen": false,
+  "python.linting.enabled": false,
+  "cSpell.words": [
+    "hstar"
+  ]
+}
