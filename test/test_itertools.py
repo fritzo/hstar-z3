@@ -1,4 +1,4 @@
-from hstar.util import partitions, weighted_partitions
+from hstar.itertools import partitions, weighted_partitions
 
 
 def test_partitions() -> None:

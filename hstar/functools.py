@@ -9,8 +9,8 @@ from collections.abc import (
 from typing import Any, NewType, ParamSpec, TypeVar
 from weakref import WeakValueDictionary
 
+from .hashcons import intern
 from .metrics import COUNTERS
-from .util import intern
 
 logger = logging.getLogger(__name__)
 counter = COUNTERS[__name__]

@@ -29,7 +29,7 @@ from .grammar import (
     subst,
     subst_complexity,
 )
-from .util import weighted_partitions
+from .itertools import weighted_partitions
 
 
 class Enumerator:

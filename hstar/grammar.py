@@ -14,7 +14,7 @@ from functools import cache, lru_cache
 from immutables import Map
 
 from .functools import weak_key_cache
-from .util import HashConsMeta, intern
+from .hashcons import HashConsMeta, intern
 
 EMPTY_VARS: Map[int, int] = Map()
 
