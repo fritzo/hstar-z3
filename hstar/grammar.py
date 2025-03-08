@@ -6,6 +6,7 @@ namely those terms that are in a particular linear normal form, i.e. that are
 simplified wrt a set of rewrite rules.
 """
 
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
@@ -203,6 +204,17 @@ def app(*args: Term) -> Term:
 
 Env = Map[int, Term]
 EMPTY_ENV: Env = Map()
+
+
+@cache
+def env_free_vars(env: Env) -> Map[int, int]:
+    """Free variable counts in an environment."""
+    result: Counter[int] = Counter()
+    for v in env.values():
+        result.update(v.free_vars)
+    for k in env.keys():
+        result.pop(k, None)
+    return Map(result)
 
 
 @cache

@@ -4,17 +4,12 @@ import pytest
 from immutables import Map
 
 from hstar.enumeration import (
+    EnvRefiner,
     Refiner,
     enumerator,
     env_enumerator,
 )
-from hstar.grammar import (
-    ABS,
-    APP,
-    VAR,
-    Term,
-    complexity,
-)
+from hstar.grammar import ABS, APP, VAR, Term, app, complexity, env_free_vars
 
 
 def test_enumerator() -> None:
@@ -48,7 +43,7 @@ def test_env_enumerator(free_vars: Map[int, int]) -> None:
 
 @pytest.mark.xfail(reason="timeout")
 @pytest.mark.timeout(0.1)
-def test_term_refiner() -> None:
+def test_refiner() -> None:
     sketch = ABS(APP(APP(VAR(0), VAR(1)), VAR(2)))
     refiner = Refiner(sketch)
     refiner.validate()
@@ -56,4 +51,23 @@ def test_term_refiner() -> None:
         candidate = refiner.next_candidate()
         # print(candidate)
         assert isinstance(candidate, Term)
+        refiner.validate()
+
+
+@pytest.mark.xfail(reason="timeout")
+@pytest.mark.timeout(0.1)
+def test_env_refiner() -> None:
+    sketch = Map(
+        {
+            0: ABS(ABS(ABS(app(VAR(2), VAR(0), VAR(1))))),  # pair
+            1: app(VAR(0), VAR(2), VAR(3)),  # <r,s>
+        }
+    )
+    assert env_free_vars(sketch) == Map({2: 1, 3: 1})
+    refiner = EnvRefiner(sketch)
+    refiner.validate()
+    for _ in range(100):
+        candidate = refiner.next_candidate()
+        # print(candidate)
+        assert isinstance(candidate, Map)
         refiner.validate()
