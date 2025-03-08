@@ -86,6 +86,11 @@ class Term(metaclass=HashConsMeta):
             return repr(next(iter(self.parts)))
         return f"JOIN({', '.join(sorted(map(repr, self.parts)))})"
 
+    def __lt__(self, other: "Term") -> bool:
+        self_key = (complexity(self), repr(self))
+        other_key = (complexity(other), repr(other))
+        return self_key < other_key
+
 
 def _JOIN(*parts: _Term) -> Term:
     """Join of terms."""

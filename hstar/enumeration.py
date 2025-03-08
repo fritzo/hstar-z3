@@ -10,7 +10,6 @@ import heapq
 import itertools
 from collections.abc import Iterator
 from functools import cache
-from typing import NamedTuple
 
 from immutables import Map
 
@@ -142,6 +141,7 @@ class SubstEnumerator:
             complexity(VAR(k)) * v for k, v in self._free_vars.items()
         )
         self._v_baseline = sum(self._free_vars.values())
+        self.baseline = self._v_baseline - self._k_baseline
         self._levels: list[set[Env]] = []
 
     def __iter__(self) -> Iterator[Env]:
@@ -178,32 +178,6 @@ def subst_enumerator(free_vars: Map[int, int]) -> SubstEnumerator:
     return SubstEnumerator(free_vars)
 
 
-class RefinementEnumerator:
-    """
-    Generator for all refinements of a sketch, approximately sorted by complexity.
-
-    Each yielded refinement substitutes terms for free variables in the sketch.
-    """
-
-    def __init__(self, sketch: Term) -> None:
-        self._sketch = sketch
-        self._env_enumerator = env_enumerator(frozenset(sketch.free_vars))
-
-    def __iter__(self) -> Iterator[Term]:
-        seen: set[Term] = set()
-        for env in self._env_enumerator:
-            term = subst(self._sketch, env)
-            if term in seen:
-                continue
-            seen.add(term)
-            yield term
-
-
-class GrowthNode(NamedTuple):
-    subst_c: int
-    term: Term
-
-
 class Refinery:
     """
     Data structure representing the DAG of refinements of a sketch, together
@@ -215,7 +189,7 @@ class Refinery:
         assert sketch.free_vars
         # Persistent state.
         self._sketch = sketch
-        self._terms: dict[Term, Env] = {}
+        self._terms: dict[Term, Env] = {sketch: Map()}  # term -> env
         self._edges: dict[tuple[Term, Term], Env] = {}  # (special, general) -> env
         self._generalize: dict[Term, set[Term]] = {}  # special -> {general}
         self._specialize: dict[Term, set[Term]] = {}  # general -> {special}
@@ -223,7 +197,8 @@ class Refinery:
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
         self._candidates_seen: set[Term] = set()
-        self._growth_heap: list[GrowthNode] = [GrowthNode(0, sketch)]
+        self._growth_heap: list[tuple[int, Term]] = []
+        self._grow_from(sketch)
 
     def next_candidate(self) -> Term:
         """Return the next candidate term to check."""
@@ -242,13 +217,13 @@ class Refinery:
         if not self._growth_heap:
             raise ValueError("Refinery is exhausted.")
         c, general = heapq.heappop(self._growth_heap)
-        if self._validity[general] is False:
+        if self._validity.get(general) is False:
             return
-        heapq.heappush(self._growth_heap, GrowthNode(c + 1, general))
+        heapq.heappush(self._growth_heap, (c + 1, general))
 
         # Specialize the term via every env of complexity c.
-        # FIXME what is c, the complexity of the final term?
-        for env in subst_enumerator(general.free_vars).level(c):
+        level = c - subst_enumerator(general.free_vars).baseline
+        for env in subst_enumerator(general.free_vars).level(level):
             special = subst(general, env)
             if special in self._terms:
                 continue
@@ -256,8 +231,12 @@ class Refinery:
             self._edges[special, general] = env
             self._generalize.setdefault(special, set()).add(general)
             self._specialize.setdefault(general, set()).add(special)
-            heapq.heappush(self._growth_heap, GrowthNode(0, special))
+            heapq.heappush(self._growth_heap, (0, special))
             heapq.heappush(self._candidate_heap, special)
+
+    def _grow_from(self, term: Term) -> None:
+        c = complexity(term) + subst_enumerator(term.free_vars).baseline
+        heapq.heappush(self._growth_heap, (c, term))
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
