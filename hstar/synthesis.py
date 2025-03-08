@@ -40,7 +40,8 @@ class Synthesizer:
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
         valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
-        self.refiner.mark_valid(candidate, valid)
+        if valid is not None:
+            self.refiner.mark_valid(candidate, valid)
         return candidate, valid
 
 
@@ -67,5 +68,6 @@ class EnvSynthesizer:
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
         valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
-        self.refiner.mark_valid(candidate, valid)
+        if valid is not None:
+            self.refiner.mark_valid(candidate, valid)
         return candidate, valid

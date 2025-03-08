@@ -172,11 +172,31 @@ class Refiner:
             self._grow()
         return heapq.heappop(self._candidate_heap)
 
-    def mark_valid(self, term: Term, validity: bool | None) -> None:
+    def mark_valid(self, candidate: Term, validity: bool) -> None:
         """Mark a candidate as valid or invalid."""
         counter["refiner.mark_valid"] += 1
-        # Propagate validity to all terms that refine it.
-        raise NotImplementedError("TODO")
+        assert candidate in self._nodes
+        pending = {candidate}
+        if validity:
+            # Propagate validity upward to generalizations.
+            while pending:
+                general = pending.pop()
+                old = self._validity.get(general)
+                if old is None:
+                    self._validity[general] = True
+                    pending.update(self._generalize.get(general, set()))
+                elif old is False:
+                    raise ValueError("contradiction")
+        else:
+            # Propagate invalidity downward to specializations.
+            while pending:
+                special = pending.pop()
+                old = self._validity.get(special)
+                if old is None:
+                    self._validity[special] = False
+                    pending.update(self._specialize.get(special, set()))
+                elif old is False:
+                    raise ValueError("contradiction")
 
     def _grow(self) -> None:
         """Grow the refinement DAG."""
@@ -255,11 +275,31 @@ class EnvRefiner:
             self._grow()
         return heapq.heappop(self._candidate_heap)
 
-    def mark_valid(self, env: Env, validity: bool | None) -> None:
+    def mark_valid(self, candidate: Env, validity: bool) -> None:
         """Mark a candidate as valid or invalid."""
         counter["env_refiner.mark_valid"] += 1
-        # Propagate validity to all environments that refine it.
-        raise NotImplementedError("TODO")
+        assert candidate in self._nodes
+        pending = {candidate}
+        if validity:
+            # Propagate validity upward to generalizations.
+            while pending:
+                general = pending.pop()
+                old = self._validity.get(general)
+                if old is None:
+                    self._validity[general] = True
+                    pending.update(self._generalize.get(general, set()))
+                elif old is False:
+                    raise ValueError("contradiction")
+        else:
+            # Propagate invalidity downward to specializations.
+            while pending:
+                special = pending.pop()
+                old = self._validity.get(special)
+                if old is None:
+                    self._validity[special] = False
+                    pending.update(self._specialize.get(special, set()))
+                elif old is False:
+                    raise ValueError("contradiction")
 
     def _grow(self) -> None:
         """Grow the refinement DAG."""
