@@ -318,6 +318,20 @@ def env_complexity(env: Env) -> int:
     return sum(complexity(term) for term in env.values())
 
 
+def subst_complexity(free_vars: Map[int, int], env: Env) -> int:
+    """
+    Complexity of a substitution.
+
+    This accounts for change in complexity due to substituting terms for free
+    variables at multiple locations, but ignores eager linear reduction.
+    """
+    result = 0
+    for k, v in env.items():
+        count = free_vars.get(k, 0)
+        result += count * (complexity(v) - complexity(VAR(k)))
+    return result
+
+
 class Enumerator:
     """Generator for all terms, sorted by complexity, then repr."""
 
@@ -325,11 +339,17 @@ class Enumerator:
         self._levels: list[set[Term]] = [set()]
 
     def __iter__(self) -> Iterator[Term]:
+        """Iterates over all terms."""
         for complexity in itertools.count():
             yield from self.level(complexity)
 
+    def up_to(self, ub: int) -> Iterator[Term]:
+        """Iterates over terms of complexity up to an inclusive upper bound."""
+        for c in range(1, ub + 1):
+            yield from self.level(c)
+
     def level(self, c: int) -> Iterator[Term]:
-        """Iterate over terms of a given complexity."""
+        """Iterates over terms of a given complexity."""
         return iter(sorted(self._get_level(c), key=repr))
 
     def _get_level(self, complexity: int) -> set[Term]:
@@ -383,7 +403,7 @@ class EnvEnumerator:
             yield from self.level(complexity)
 
     def level(self, c: int) -> Iterator[Env]:
-        """Iterate over environments of a given complexity."""
+        """Iterates over environments of a given complexity."""
         return iter(sorted(self._get_level(c), key=repr))
 
     def _get_level(self, complexity: int) -> set[Env]:
@@ -410,6 +430,39 @@ class EnvEnumerator:
 def env_enumerator(keys: frozenset[int]) -> EnvEnumerator:
     """Enumerator for all environments, sorted by complexity, then repr."""
     return EnvEnumerator(keys)
+
+
+class SubstEnumerator:
+    """Generator for all substitutions, sorted by complexity, then repr."""
+
+    def __init__(self, free_vars: Map[int, int]) -> None:
+        assert all(count > 0 for count in free_vars.values())
+        self._free_vars = free_vars
+        base_subs = Map((k, TOP) for k in free_vars)
+        self._baseline = subst_complexity(free_vars, base_subs)
+        self._levels: list[set[Env]] = [set()]
+
+    def __iter__(self) -> Iterator[Env]:
+        for complexity in itertools.count():
+            yield from self.level(complexity)
+
+    def level(self, c: int) -> Iterator[Env]:
+        """Iterates over substitutions of a given complexity."""
+        return iter(sorted(self._get_level(c), key=repr))
+
+    def _get_level(self, complexity: int) -> set[Env]:
+        while len(self._levels) <= complexity:
+            self._add_level()
+        return self._levels[complexity]
+
+    def _add_level(self) -> None:
+        self._levels.append(set())
+        raise NotImplementedError("TODO")
+        # Something like this:
+        # c = len(self._levels) - 1
+        # ks = sorted(self._free_vars, reverse=True)
+        # stack: list[int] = []
+        # ...
 
 
 class RefinementEnumerator:
