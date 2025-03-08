@@ -9,10 +9,11 @@ simplified wrt a set of rewrite rules.
 from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-from functools import cache
+from functools import cache, lru_cache
 
 from immutables import Map
 
+from .functools import weak_key_cache
 from .util import HashConsMeta, intern
 
 EMPTY_VARS: Map[int, int] = Map()
@@ -59,6 +60,7 @@ class _Term(metaclass=HashConsMeta):
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
+    @weak_key_cache
     def __repr__(self) -> str:
         if self.typ == TermType.TOP:
             return "TOP"
@@ -85,6 +87,7 @@ class Term(metaclass=HashConsMeta):
     # Metadata.
     free_vars: Map[int, int] = EMPTY_VARS
 
+    @weak_key_cache
     def __repr__(self) -> str:
         if not self.parts:
             return "BOT"
@@ -100,17 +103,12 @@ class Term(metaclass=HashConsMeta):
 
 def _JOIN(*parts: _Term) -> Term:
     """Join of terms."""
-    return _JOIN_cached(frozenset(parts))
-
-
-@cache
-def _JOIN_cached(parts: frozenset[_Term]) -> Term:
-    """Join of terms."""
+    parts_ = frozenset(parts)
     # Eagerly linearly reduce.
-    if _TOP in parts and len(parts) > 1:
-        parts = frozenset((_TOP,))
-    free_vars = max_vars(*(a.free_vars for a in parts))
-    return Term(parts, free_vars=free_vars)
+    if _TOP in parts_ and len(parts_) > 1:
+        parts_ = frozenset((_TOP,))
+    free_vars = max_vars(*(a.free_vars for a in parts_))
+    return Term(parts_, free_vars=free_vars)
 
 
 def JOIN(*args: Term) -> Term:
@@ -143,7 +141,7 @@ def VAR(varname: int) -> Term:
     return _JOIN(_VAR(varname))
 
 
-@cache
+@weak_key_cache
 def _ABS(head: _Term) -> _Term:
     """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
     assert head.typ != TermType.TOP, "use ABS instead"
@@ -152,7 +150,7 @@ def _ABS(head: _Term) -> _Term:
     return _Term(TermType.ABS, head=head, free_vars=free_vars)
 
 
-@cache
+@weak_key_cache
 def ABS(head: Term) -> Term:
     """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
     # Eagerly linearly reduce.
@@ -162,7 +160,7 @@ def ABS(head: Term) -> Term:
     return _JOIN(*(_ABS(part) for part in head.parts))
 
 
-@cache
+@weak_key_cache
 def _APP(head: _Term, body: Term) -> Term:
     """Application."""
     # Eagerly linearly reduce.
@@ -184,7 +182,7 @@ def _APP(head: _Term, body: Term) -> Term:
     return _JOIN(arg)
 
 
-@cache
+@weak_key_cache
 def APP(head: Term, body: Term) -> Term:
     """Application."""
     args: list[_Term] = []
@@ -206,7 +204,7 @@ Env = Map[int, Term]
 EMPTY_ENV: Env = Map()
 
 
-@cache
+@lru_cache
 def env_free_vars(env: Env) -> Map[int, int]:
     """Free variable counts in an environment."""
     result: Counter[int] = Counter()
@@ -217,7 +215,7 @@ def env_free_vars(env: Env) -> Map[int, int]:
     return Map(result)
 
 
-@cache
+@weak_key_cache
 def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
     """
     Shift all free VARs in term by delta.
@@ -246,7 +244,7 @@ def _shift(term: _Term, *, start: int = 0, delta: int = 1) -> _Term:
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
-@cache
+@weak_key_cache
 def shift(term: Term, *, start: int = 0, delta: int = 1) -> Term:
     """
     Shift all free VARs in a JoinTerm by delta.
@@ -273,7 +271,7 @@ def env_shift(env: Env, *, start: int = 0, delta: int = 1) -> Env:
     return intern(Map(result))
 
 
-@cache
+@weak_key_cache
 def _subst(term: _Term, env: Env) -> Term:
     """Substitute variables according to an environment mapping."""
     # Check if term has any free variables that are in the environment
@@ -296,7 +294,7 @@ def _subst(term: _Term, env: Env) -> Term:
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
-@cache
+@weak_key_cache
 def subst(term: Term, env: Env) -> Term:
     """Substitute variables according to an environment mapping in a JoinTerm."""
     if not env:
@@ -304,7 +302,7 @@ def subst(term: Term, env: Env) -> Term:
     return JOIN(*(_subst(part, env) for part in term.parts))
 
 
-@cache
+@lru_cache
 def env_compose(lhs: Env, rhs: Env) -> Env:
     """
     Compose two environments.
@@ -320,6 +318,7 @@ def env_compose(lhs: Env, rhs: Env) -> Env:
     return intern(Map(result))
 
 
+@weak_key_cache
 def _complexity(term: _Term) -> int:
     """Complexity of a term."""
     if term.typ == TermType.TOP:
@@ -336,6 +335,7 @@ def _complexity(term: _Term) -> int:
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
+@weak_key_cache
 def complexity(term: Term) -> int:
     """
     Complexity of a term.
@@ -358,11 +358,13 @@ def complexity(term: Term) -> int:
     return sum(map(_complexity, term.parts)) + len(term.parts) - 1
 
 
+@lru_cache
 def env_complexity(env: Env) -> int:
     """Complexity of an environment."""
     return sum(complexity(term) for term in env.values())
 
 
+@lru_cache
 def subst_complexity(free_vars: Map[int, int], env: Env) -> int:
     """
     Complexity of a substitution.
