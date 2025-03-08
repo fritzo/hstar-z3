@@ -158,7 +158,7 @@ class Refiner:
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
         self._growth_heap: list[tuple[int, Term]] = []
-        self._grow_from(sketch)
+        self._start_refining(sketch)
 
     def next_candidate(self) -> Term:
         """Return the next candidate term to check."""
@@ -175,7 +175,7 @@ class Refiner:
         """Grow the refinement DAG."""
         # Find a term to refine.
         if not self._growth_heap:
-            raise ValueError("Refiner is exhausted.")
+            raise StopIteration("Refiner is exhausted.")
         c, general = heapq.heappop(self._growth_heap)
         if self._validity.get(general) is False:
             return
@@ -192,12 +192,13 @@ class Refiner:
             self._edges[special, general] = env
             self._generalize.setdefault(special, set()).add(general)
             self._specialize.setdefault(general, set()).add(special)
-            heapq.heappush(self._growth_heap, (0, special))
             heapq.heappush(self._candidate_heap, special)
+            if special.free_vars:
+                self._start_refining(special)
 
-    def _grow_from(self, term: Term) -> None:
-        c = complexity(term) + env_enumerator(term.free_vars).baseline
-        heapq.heappush(self._growth_heap, (c, term))
+    def _start_refining(self, general: Term) -> None:
+        c = complexity(general) + env_enumerator(general.free_vars).baseline
+        heapq.heappush(self._growth_heap, (c, general))
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
@@ -237,7 +238,7 @@ class EnvRefiner:
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Env] = [sketch]
         self._growth_heap: list[tuple[int, Env]] = []
-        self._grow_from(sketch)
+        self._start_refining(sketch)
 
     def next_candidate(self) -> Env:
         """Return the next candidate environment to check."""
@@ -254,7 +255,7 @@ class EnvRefiner:
         """Grow the refinement DAG."""
         # Find an environment to refine.
         if not self._growth_heap:
-            raise ValueError("EnvRefiner is exhausted.")
+            raise StopIteration("EnvRefiner is exhausted.")
         c, general = heapq.heappop(self._growth_heap)
         if self._validity.get(general) is False:
             return
@@ -271,12 +272,13 @@ class EnvRefiner:
             self._edges[special, general] = env
             self._generalize.setdefault(special, set()).add(general)
             self._specialize.setdefault(general, set()).add(special)
-            heapq.heappush(self._growth_heap, (0, special))
             heapq.heappush(self._candidate_heap, special)
+            if env_free_vars(special):
+                self._start_refining(special)
 
-    def _grow_from(self, env: Env) -> None:
-        c = env_complexity(env) + env_enumerator(env_free_vars(env)).baseline
-        heapq.heappush(self._growth_heap, (c, env))
+    def _start_refining(self, general: Env) -> None:
+        c = env_complexity(general) + env_enumerator(env_free_vars(general)).baseline
+        heapq.heappush(self._growth_heap, (c, general))
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
