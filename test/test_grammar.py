@@ -1,3 +1,5 @@
+import logging
+
 from immutables import Map
 
 from hstar.grammar import (
@@ -14,6 +16,8 @@ from hstar.grammar import (
     shift,
     subst,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def test_hash_consing() -> None:

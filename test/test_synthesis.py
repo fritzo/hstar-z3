@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import z3
 from immutables import Map
@@ -6,6 +8,8 @@ from hstar.bridge import py_to_z3
 from hstar.grammar import ABS, APP, VAR, Term, app, env_free_vars
 from hstar.solvers import LEQ
 from hstar.synthesis import EnvSynthesizer, Synthesizer
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.xfail(reason="timeout")
@@ -23,7 +27,7 @@ def test_synthesizer() -> None:
     synthesizer = Synthesizer(sketch, constraint)
     for _ in range(100):
         candidate, valid = synthesizer.step()
-        # print(candidate)
+        logger.debug(candidate)
         assert isinstance(candidate, Term)
 
 
@@ -48,5 +52,5 @@ def test_env_synthesizer() -> None:
     synthesizer = EnvSynthesizer(sketch, constraint)
     for _ in range(100):
         candidate, valid = synthesizer.step()
-        # print(candidate)
+        logger.debug(candidate)
         assert isinstance(candidate, Map)

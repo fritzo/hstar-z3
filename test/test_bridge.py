@@ -1,8 +1,12 @@
+import logging
+
 import pytest
 import z3
 
 from hstar import grammar, solvers
 from hstar.bridge import py_to_z3, z3_to_py
+
+logger = logging.getLogger(__name__)
 
 # A list of examples with Python terms and their corresponding Z3 expressions
 EXAMPLES: list[tuple[grammar.Term, z3.ExprRef]] = [

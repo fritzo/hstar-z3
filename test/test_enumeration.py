@@ -1,4 +1,5 @@
 import itertools
+import logging
 
 import pytest
 from immutables import Map
@@ -11,10 +12,12 @@ from hstar.enumeration import (
 )
 from hstar.grammar import ABS, APP, VAR, Term, app, complexity, env_free_vars
 
+logger = logging.getLogger(__name__)
+
 
 def test_enumerator() -> None:
     actual = list(itertools.islice(enumerator, 1000))
-    # print("\n".join(str(x) for x in actual))
+    logger.debug("\n".join(str(x) for x in actual))
     expected = actual[:]
     expected.sort(key=lambda x: (complexity(x), repr(x)))
     assert actual == expected
@@ -35,7 +38,7 @@ EXAMPLE_FREE_VARS = [
 def test_env_enumerator(free_vars: Map[int, int]) -> None:
     enumerator = env_enumerator(free_vars)
     actual = list(itertools.islice(enumerator, 1000))
-    # print("\n".join(str(x) for x in actual))
+    logger.debug("\n".join(str(x) for x in actual))
     for env in actual:
         assert isinstance(env, Map)
         assert set(env.keys()) <= set(free_vars.keys())
@@ -49,7 +52,7 @@ def test_refiner() -> None:
     refiner.validate()
     for _ in range(100):
         candidate = refiner.next_candidate()
-        # print(candidate)
+        logger.debug(candidate)
         assert isinstance(candidate, Term)
         refiner.validate()
 
@@ -68,6 +71,6 @@ def test_env_refiner() -> None:
     refiner.validate()
     for _ in range(100):
         candidate = refiner.next_candidate()
-        # print(candidate)
+        logger.debug(candidate)
         assert isinstance(candidate, Map)
         refiner.validate()
