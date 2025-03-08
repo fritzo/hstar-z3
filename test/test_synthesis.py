@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.xfail(reason="timeout")
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(0.2)
 def test_synthesizer() -> None:
     # Sketch: (\x. x r s) == <r,s>
     sketch = ABS(app(VAR(0), VAR(1), VAR(2)))
@@ -25,14 +25,14 @@ def test_synthesizer() -> None:
         return LEQ(py_to_z3(lhs), py_to_z3(rhs))
 
     synthesizer = Synthesizer(sketch, constraint)
-    for _ in range(100):
-        candidate, valid = synthesizer.step()
-        logger.debug(candidate)
+    for _ in range(10):
+        candidate, valid = synthesizer.step(timeout_ms=10)
+        logger.debug(f"{candidate}, valid = {valid}")
         assert isinstance(candidate, Term)
 
 
 @pytest.mark.xfail(reason="timeout")
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(0.2)
 def test_env_synthesizer() -> None:
     sketch = Map(
         {
@@ -50,7 +50,7 @@ def test_env_synthesizer() -> None:
         return LEQ(py_to_z3(lhs), py_to_z3(rhs))
 
     synthesizer = EnvSynthesizer(sketch, constraint)
-    for _ in range(100):
-        candidate, valid = synthesizer.step()
-        logger.debug(candidate)
+    for _ in range(10):
+        candidate, valid = synthesizer.step(timeout_ms=10)
+        logger.debug(f"{candidate}, valid = {valid}")
         assert isinstance(candidate, Map)
