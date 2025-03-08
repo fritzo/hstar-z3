@@ -240,7 +240,7 @@ def test_env_compose() -> None:
     composed = env_compose(env3, env4)
     # VAR(2) is substituted to VAR(5) due to the mapping 2->VAR(5) in env4
     # VAR(3) remains unchanged as there's no mapping for 3 in env4
-    assert composed == Map({0: VAR(5), 2: VAR(3)})  
+    assert composed == Map({0: VAR(5), 2: VAR(3)})
 
     # Test the composition property:
     # subst(term, env_compose(lhs, rhs)) == subst(subst(term, lhs), rhs)
