@@ -27,6 +27,10 @@ def test_enumerator() -> None:
     expected.sort(key=lambda x: (complexity(x), repr(x)))
     assert actual == expected
 
+    for c in range(4):
+        for term in enumerator.level(c):
+            assert complexity(term) == c
+
 
 EXAMPLE_KEYS = [
     frozenset([0]),
@@ -35,7 +39,6 @@ EXAMPLE_KEYS = [
 ]
 
 
-@pytest.mark.xfail(reason="mismatched complexity")
 @pytest.mark.parametrize("keys", EXAMPLE_KEYS)
 def test_env_enumerator(keys: frozenset[int]) -> None:
     enumerator = env_enumerator(keys)
@@ -64,7 +67,6 @@ def test_subst_enumerator(free_vars: Map[int, int]) -> None:
         assert set(env.keys()) <= set(free_vars.keys())
 
 
-@pytest.mark.xfail(reason="mismatched complexity")
 def test_refinement_enumerator() -> None:
     sketch = ABS(APP(APP(VAR(0), VAR(1)), VAR(2)))
     enumerator = RefinementEnumerator(sketch)

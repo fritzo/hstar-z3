@@ -115,10 +115,7 @@ class EnvEnumerator:
             factors = [enumerator.level(p) if p else [None] for p in partition]
             for vs in itertools.product(*factors):
                 env = Map(
-                    (k, v)
-                    for k, v in zip(self._keys, vs, strict=True)
-                    if v is not None
-                    if v is not VAR(k)
+                    (k, v) for k, v in zip(self._keys, vs, strict=True) if v is not None
                 )
                 assert env_complexity(env) == c
                 self._levels[-1].add(env)
