@@ -56,7 +56,6 @@ EXAMPLE_FREE_VARS = [
 ]
 
 
-@pytest.mark.xfail(reason="mismatched complexity")
 @pytest.mark.parametrize("free_vars", EXAMPLE_FREE_VARS)
 def test_subst_enumerator(free_vars: Map[int, int]) -> None:
     enumerator = subst_enumerator(free_vars)

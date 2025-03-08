@@ -135,8 +135,10 @@ class SubstEnumerator:
         self._free_vars = free_vars
         self._keys = tuple(sorted(self._free_vars, reverse=True))
         self._weights = tuple(self._free_vars[k] for k in self._keys)
-        base_subs = Map((k, TOP) for k in free_vars)
-        self._baseline = subst_complexity(free_vars, base_subs)
+        self._k_baseline = sum(
+            complexity(VAR(k)) * v for k, v in self._free_vars.items()
+        )
+        self._v_baseline = sum(self._free_vars.values())
         self._levels: list[set[Env]] = []
 
     def __iter__(self) -> Iterator[Env]:
@@ -154,7 +156,7 @@ class SubstEnumerator:
 
     def _add_level(self) -> None:
         self._levels.append(set())
-        c = len(self._levels) - 1 - self._baseline
+        c = len(self._levels) - 1 + self._v_baseline
         for partition in weighted_partitions(c, self._weights):
             factors = [enumerator.level(p) for p in partition]
             for vs in itertools.product(*factors):
@@ -163,7 +165,7 @@ class SubstEnumerator:
                     for k, v in zip(self._keys, vs, strict=True)
                     if v is not VAR(k)
                 )
-                assert subst_complexity(self._free_vars, env) == c
+                assert subst_complexity(self._free_vars, env) == c - self._k_baseline
                 self._levels[-1].add(env)
 
 
