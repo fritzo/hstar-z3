@@ -273,6 +273,22 @@ def subst(term: Term, env: Env) -> Term:
     return JOIN(*(_subst(part, env) for part in term.parts))
 
 
+@cache
+def env_compose(lhs: Env, rhs: Env) -> Env:
+    """
+    Compose two environments.
+
+    `subst(term, env_compose(lhs, rhs)) == subst(subst(term, lhs), rhs)`
+    """
+    result: dict[int, Term] = {}
+    for k, v in lhs.items():
+        result[k] = subst(v, rhs)
+    for k, v in rhs.items():
+        if k not in lhs:
+            result[k] = v
+    return intern(Map(result))
+
+
 def _complexity(term: _Term) -> int:
     """Complexity of a term."""
     if term.typ == TermType.TOP:

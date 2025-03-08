@@ -12,6 +12,7 @@ from hstar.grammar import (
     TermType,
     _Term,
     complexity,
+    env_compose,
     shift,
     subst,
 )
@@ -219,3 +220,49 @@ def test_complexity() -> None:
     # Test complexity of join terms
     join_term = JOIN(VAR(0), VAR(1))
     assert complexity(join_term) == 4  # 1 (VAR) + 2 (VAR) + (2 - 1)
+
+
+def test_env_compose() -> None:
+    """Test that environment composition works correctly."""
+    # Test basic environment composition
+    env1 = Map({0: VAR(1)})
+    env2 = Map({1: VAR(2)})
+    composed = env_compose(env1, env2)
+    assert composed == Map({0: VAR(2), 1: VAR(2)})  # VAR(1) substituted to VAR(2)
+
+    # Test composition with empty environments
+    assert env_compose(Map(), env2) == env2
+    assert env_compose(env1, Map()) == env1
+
+    # Test composition with overlapping variables
+    env3 = Map({0: VAR(2), 2: VAR(3)})
+    env4 = Map({0: VAR(4), 2: VAR(5)})
+    composed = env_compose(env3, env4)
+    # VAR(2) is substituted to VAR(5) due to the mapping 2->VAR(5) in env4
+    # VAR(3) remains unchanged as there's no mapping for 3 in env4
+    assert composed == Map({0: VAR(5), 2: VAR(3)})  
+
+    # Test the composition property:
+    # subst(term, env_compose(lhs, rhs)) == subst(subst(term, lhs), rhs)
+    term = JOIN(VAR(0), APP(VAR(1), VAR(2)))
+    env_a = Map({0: VAR(3), 1: VAR(4)})
+    env_b = Map({3: VAR(5), 4: VAR(6)})
+
+    # Left-hand side of the equation
+    lhs_result = subst(term, env_compose(env_a, env_b))
+
+    # Right-hand side of the equation
+    rhs_result = subst(subst(term, env_a), env_b)
+
+    # They should be equal
+    assert lhs_result is rhs_result
+
+    # Test with more complex terms and environments
+    complex_term = APP(ABS(JOIN(VAR(0), VAR(1))), VAR(2))
+    env_c = Map({1: TOP, 2: BOT})
+    env_d = Map({0: VAR(3)})
+
+    lhs_result = subst(complex_term, env_compose(env_c, env_d))
+    rhs_result = subst(subst(complex_term, env_c), env_d)
+
+    assert lhs_result is rhs_result
