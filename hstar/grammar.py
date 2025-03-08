@@ -14,7 +14,7 @@ from functools import cache
 
 from immutables import Map
 
-from .util import HashConsMeta, intern, partitions
+from .util import HashConsMeta, intern, partitions, weighted_partitions
 
 EMPTY_VARS: Map[int, int] = Map()
 
@@ -392,7 +392,7 @@ enumerator = Enumerator()
 
 
 class EnvEnumerator:
-    """Generator for all environments, sorted by complexity, then repr."""
+    """Generator for all environments, sorted by env_complexity, then repr."""
 
     def __init__(self, keys: frozenset[int]) -> None:
         self._keys = keys
@@ -416,31 +416,34 @@ class EnvEnumerator:
         c = len(self._levels) - 1
         for partition in partitions(c, len(self._keys)):
             factors = [enumerator.level(p) if p else [None] for p in partition]
-            for cs in itertools.product(*factors):
+            for vs in itertools.product(*factors):
                 env = Map(
                     (k, v)
-                    for k, v in zip(self._keys, cs, strict=True)
+                    for k, v in zip(self._keys, vs, strict=True)
                     if v is not None
                     if v is not VAR(k)
                 )
-                self._levels[c].add(env)
+                assert env_complexity(env) == c
+                self._levels[-1].add(env)
 
 
 @cache
 def env_enumerator(keys: frozenset[int]) -> EnvEnumerator:
-    """Enumerator for all environments, sorted by complexity, then repr."""
+    """Enumerator for all environments, sorted by env_complexity, then repr."""
     return EnvEnumerator(keys)
 
 
 class SubstEnumerator:
-    """Generator for all substitutions, sorted by complexity, then repr."""
+    """Generator for all substitutions, sorted by subst_complexity, then repr."""
 
     def __init__(self, free_vars: Map[int, int]) -> None:
         assert all(count > 0 for count in free_vars.values())
         self._free_vars = free_vars
+        self._keys = tuple(sorted(self._free_vars, reverse=True))
+        self._weights = tuple(self._free_vars[k] for k in self._keys)
         base_subs = Map((k, TOP) for k in free_vars)
         self._baseline = subst_complexity(free_vars, base_subs)
-        self._levels: list[set[Env]] = [set()]
+        self._levels: list[set[Env]] = []
 
     def __iter__(self) -> Iterator[Env]:
         for complexity in itertools.count():
@@ -457,12 +460,23 @@ class SubstEnumerator:
 
     def _add_level(self) -> None:
         self._levels.append(set())
-        raise NotImplementedError("TODO")
-        # Something like this:
-        # c = len(self._levels) - 1
-        # ks = sorted(self._free_vars, reverse=True)
-        # stack: list[int] = []
-        # ...
+        c = len(self._levels) - 1 - self._baseline
+        for partition in weighted_partitions(c, self._weights):
+            factors = [enumerator.level(p) for p in partition]
+            for vs in itertools.product(*factors):
+                env = Map(
+                    (k, v)
+                    for k, v in zip(self._keys, vs, strict=True)
+                    if v is not VAR(k)
+                )
+                assert subst_complexity(self._free_vars, env) == c
+                self._levels[-1].add(env)
+
+
+@cache
+def subst_enumerator(free_vars: Map[int, int]) -> SubstEnumerator:
+    """Enumerator for all substitutions, sorted by subst_complexity, then repr."""
+    return SubstEnumerator(free_vars)
 
 
 class RefinementEnumerator:
