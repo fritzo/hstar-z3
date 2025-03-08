@@ -10,7 +10,8 @@ a types-as-closures.
 """
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 
 import z3
 from z3 import And, ForAll, If, Implies, Not, Or
@@ -478,13 +479,27 @@ def add_theory(s: z3.Solver) -> None:
     type_theory(s)
 
 
-def try_prove(solver: z3.Solver, formula: z3.ExprRef) -> tuple[bool | None, str | None]:
+@contextmanager
+def timeout_context(solver: z3.Solver, timeout_ms: int) -> Generator[None, None, None]:
+    """Context manager to set a timeout on a Z3 solver."""
+    old_timeout = solver.timeout()
+    solver.set(timeout=timeout_ms)
+    try:
+        yield
+    finally:
+        solver.set(timeout=old_timeout)
+
+
+def try_prove(
+    solver: z3.Solver, formula: z3.ExprRef, *, timeout_ms: int = 1000
+) -> tuple[bool | None, str | None]:
     """
     Try to prove a formula is valid or invalid.
 
     Args:
         solver: Z3 solver to use
         formula: Formula to check validity of
+        timeout_seconds: Maximum time (in seconds) to spend on the check
 
     Returns:
         Tuple of:
@@ -494,7 +509,7 @@ def try_prove(solver: z3.Solver, formula: z3.ExprRef) -> tuple[bool | None, str 
         And the counterexample model string (if formula is not valid)
     """
     counter["try_prove"] += 1
-    with solver:
+    with solver, timeout_context(solver, timeout_ms):
         solver.add(Not(formula))
         result = solver.check()
         if result == z3.unsat:

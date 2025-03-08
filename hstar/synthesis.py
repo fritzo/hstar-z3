@@ -23,7 +23,7 @@ class Synthesizer:
 
     Args:
         sketch: The term sketch to refine.
-        constraint: A function that takes a candidate and returns a Z3
+        constraint: A function that takes a candidate term and returns a Z3
             expression representing a constraint on the candidate.
     """
 
@@ -34,12 +34,12 @@ class Synthesizer:
         self._solver = z3.Solver()
         add_theory(self._solver)
 
-    def step(self) -> tuple[Term, bool | None]:
+    def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
         """Generate the next candidate and check it."""
         counter["synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
-        valid, _ = try_prove(self._solver, constraint)
+        valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
         self.refiner.mark_valid(candidate, valid)
         return candidate, valid
 
@@ -50,7 +50,7 @@ class EnvSynthesizer:
 
     Args:
         sketch: The environment sketch to refine.
-        constraint: A function that takes a candidate and returns a Z3
+        constraint: A function that takes a candidate env and returns a Z3
             expression representing a constraint on the candidate.
     """
 
@@ -61,11 +61,11 @@ class EnvSynthesizer:
         self._solver = z3.Solver()
         add_theory(self._solver)
 
-    def step(self) -> tuple[Env, bool | None]:
+    def step(self, *, timeout_ms: int = 1000) -> tuple[Env, bool | None]:
         """Generate the next candidate and check it."""
         counter["env_synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
-        valid, _ = try_prove(self._solver, constraint)
+        valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
         self.refiner.mark_valid(candidate, valid)
         return candidate, valid
