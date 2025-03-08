@@ -11,7 +11,10 @@ import z3
 
 from .enumeration import EnvRefiner, Refiner
 from .grammar import Env, Term
+from .metrics import COUNTERS
 from .solvers import add_theory, try_prove
+
+counter = COUNTERS[__name__]
 
 
 class Synthesizer:
@@ -33,6 +36,7 @@ class Synthesizer:
 
     def step(self) -> tuple[Term, bool | None]:
         """Generate the next candidate and check it."""
+        counter["synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
         valid, _ = try_prove(self._solver, constraint)
@@ -59,6 +63,7 @@ class EnvSynthesizer:
 
     def step(self) -> tuple[Env, bool | None]:
         """Generate the next candidate and check it."""
+        counter["env_synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         constraint = self.constraint(candidate)
         valid, _ = try_prove(self._solver, constraint)

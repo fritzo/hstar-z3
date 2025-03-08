@@ -15,6 +15,10 @@ from collections.abc import Callable
 import z3
 from z3 import And, ForAll, If, Implies, Not, Or
 
+from .metrics import COUNTERS
+
+counter = COUNTERS[__name__]
+
 # Terms.
 Term = z3.Datatype("Term")
 Term.declare("TOP")
@@ -465,6 +469,7 @@ def type_theory(s: z3.Solver) -> None:
 
 
 def add_theory(s: z3.Solver) -> None:
+    counter["add_theory"] += 1
     de_bruijn_theory(s)
     order_theory(s)
     lambda_theory(s)
@@ -488,6 +493,7 @@ def try_prove(solver: z3.Solver, formula: z3.ExprRef) -> tuple[bool | None, str 
         - None if formula is satisfiable but not valid
         And the counterexample model string (if formula is not valid)
     """
+    counter["try_prove"] += 1
     with solver:
         solver.add(Not(formula))
         result = solver.check()
