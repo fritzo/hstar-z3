@@ -8,6 +8,7 @@ simplified wrt a set of rewrite rules.
 
 import heapq
 import itertools
+from collections import defaultdict
 from collections.abc import Iterator
 from functools import cache
 
@@ -155,10 +156,10 @@ class Refiner:
         assert sketch.free_vars
         # Persistent state.
         self._sketch = sketch
-        self._nodes: dict[Term, Env] = {sketch: Map()}  # term -> substitution
+        self._nodes: dict[Term, Env] = {sketch: Map()}  # (candidate, env) -> env
         self._edges: dict[tuple[Term, Term], Env] = {}  # (special, general) -> env
-        self._generalize: dict[Term, set[Term]] = {}  # special -> {general}
-        self._specialize: dict[Term, set[Term]] = {}  # general -> {special}
+        self._generalize: dict[Term, set[Term]] = defaultdict(set)  # special -> general
+        self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
         self._validity: dict[Term, bool | None] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
@@ -184,7 +185,7 @@ class Refiner:
                 old = self._validity.get(general)
                 if old is None:
                     self._validity[general] = True
-                    pending.update(self._generalize.get(general, set()))
+                    pending.update(self._generalize[general])
                 elif old is False:
                     raise ValueError("contradiction")
         else:
@@ -194,7 +195,7 @@ class Refiner:
                 old = self._validity.get(special)
                 if old is None:
                     self._validity[special] = False
-                    pending.update(self._specialize.get(special, set()))
+                    pending.update(self._specialize[special])
                 elif old is False:
                     raise ValueError("contradiction")
 
@@ -218,8 +219,8 @@ class Refiner:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)
             self._edges[special, general] = env
-            self._generalize.setdefault(special, set()).add(general)
-            self._specialize.setdefault(general, set()).add(special)
+            self._generalize[special].add(general)
+            self._specialize[general].add(special)
             heapq.heappush(self._candidate_heap, special)
             if special.free_vars:
                 self._start_refining(special)
@@ -258,10 +259,10 @@ class EnvRefiner:
         # Persistent state.
         self._sketch = sketch
         self._free_vars = env_free_vars(sketch)
-        self._nodes: dict[Env, Env] = {sketch: sketch}
-        self._edges: dict[tuple[Env, Env], Env] = {}
-        self._generalize: dict[Env, set[Env]] = {}
-        self._specialize: dict[Env, set[Env]] = {}
+        self._nodes: dict[Env, Env] = {sketch: Map()}  # (candidate, env) -> env
+        self._edges: dict[tuple[Env, Env], Env] = {}  # (special, general) -> env
+        self._generalize: dict[Env, set[Env]] = defaultdict(set)  # special -> general
+        self._specialize: dict[Env, set[Env]] = defaultdict(set)  # general -> special
         self._validity: dict[Env, bool | None] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Env] = [sketch]
@@ -287,7 +288,7 @@ class EnvRefiner:
                 old = self._validity.get(general)
                 if old is None:
                     self._validity[general] = True
-                    pending.update(self._generalize.get(general, set()))
+                    pending.update(self._generalize[general])
                 elif old is False:
                     raise ValueError("contradiction")
         else:
@@ -297,7 +298,7 @@ class EnvRefiner:
                 old = self._validity.get(special)
                 if old is None:
                     self._validity[special] = False
-                    pending.update(self._specialize.get(special, set()))
+                    pending.update(self._specialize[special])
                 elif old is False:
                     raise ValueError("contradiction")
 
@@ -321,8 +322,8 @@ class EnvRefiner:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)
             self._edges[special, general] = env
-            self._generalize.setdefault(special, set()).add(general)
-            self._specialize.setdefault(general, set()).add(special)
+            self._generalize[special].add(general)
+            self._specialize[general].add(special)
             heapq.heappush(self._candidate_heap, special)
             if env_free_vars(special):
                 self._start_refining(special)
