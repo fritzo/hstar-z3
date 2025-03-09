@@ -8,6 +8,7 @@ simplified wrt a set of rewrite rules.
 
 import heapq
 import itertools
+import math
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cache
@@ -84,6 +85,9 @@ class Enumerator:
                     self._add_term(APP(lhs, rhs))
                     self._add_term(JOIN(lhs, rhs))
 
+        log2len = round(math.log2(len(self._levels[-1])))
+        counter[f"enumerator.level.log2len.{log2len}"] += 1
+
     def _add_term(self, term: Term) -> None:
         c = complexity(term)
         if c >= len(self._levels):
@@ -138,6 +142,8 @@ class EnvEnumerator:
                 )
                 assert subst_complexity(self._free_vars, env) == c - self._k_baseline
                 self._levels[-1].add(env)
+        log2len = round(math.log2(len(self._levels[-1])))
+        counter[f"env_enumerator.level.log2len.{log2len}"] += 1
 
 
 @cache
