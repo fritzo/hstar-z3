@@ -44,7 +44,6 @@ def test_env_enumerator(free_vars: Map[int, int]) -> None:
         assert set(env.keys()) <= set(free_vars.keys())
 
 
-@pytest.mark.xfail(reason="timeout")
 @pytest.mark.timeout(0.1)
 def test_refiner() -> None:
     sketch = ABS(APP(APP(VAR(0), VAR(1)), VAR(2)))
@@ -57,7 +56,7 @@ def test_refiner() -> None:
         refiner.validate()
 
 
-@pytest.mark.xfail(reason="timeout")
+@pytest.mark.xfail(reason="Env.__lt__ undefined")
 @pytest.mark.timeout(0.1)
 def test_env_refiner() -> None:
     sketch = Map(

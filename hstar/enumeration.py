@@ -85,8 +85,8 @@ class Enumerator:
                     self._add_term(APP(lhs, rhs))
                     self._add_term(JOIN(lhs, rhs))
 
-        log2len = round(math.log2(len(self._levels[-1])))
-        counter[f"enumerator.level.log2len.{log2len}"] += 1
+        log21p = round(math.log2(1 + len(self._levels[-1])))
+        counter[f"enumerator.level.log21p.{log21p}"] += 1
 
     def _add_term(self, term: Term) -> None:
         c = complexity(term)
@@ -116,17 +116,20 @@ class EnvEnumerator:
         self._levels: list[set[Env]] = []
 
     def __iter__(self) -> Iterator[Env]:
-        for c in itertools.count():
-            yield from self.level(c)
+        for level in itertools.count():
+            yield from self.level(level)
 
-    def level(self, c: int) -> Iterator[Env]:
-        """Iterates over substitutions of a given complexity."""
-        return iter(sorted(self._get_level(c), key=repr))
+    def level(self, level: int) -> Iterator[Env]:
+        """
+        Iterates over substitutions at a given complexity level, starting at zero.
+        """
+        assert level >= 0
+        return iter(sorted(self._get_level(level), key=repr))
 
-    def _get_level(self, complexity: int) -> set[Env]:
-        while len(self._levels) <= complexity:
+    def _get_level(self, level: int) -> set[Env]:
+        while len(self._levels) <= level:
             self._add_level()
-        return self._levels[complexity]
+        return self._levels[level]
 
     def _add_level(self) -> None:
         counter["env_enumerator.add_level"] += 1
@@ -142,8 +145,8 @@ class EnvEnumerator:
                 )
                 assert subst_complexity(self._free_vars, env) == c - self._k_baseline
                 self._levels[-1].add(env)
-        log2len = round(math.log2(len(self._levels[-1])))
-        counter[f"env_enumerator.level.log2len.{log2len}"] += 1
+        log21p = round(math.log2(1 + len(self._levels[-1])))
+        counter[f"env_enumerator.level.log21p.{log21p}"] += 1
 
 
 @cache
@@ -167,7 +170,7 @@ class Refiner:
         self._validity: dict[Term, bool] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
-        self._growth_heap: list[tuple[int, Term]] = []
+        self._growth_heap: list[tuple[int, int, Term]] = []
         self._start_refining(sketch)
 
     def next_candidate(self) -> Term:
@@ -209,15 +212,13 @@ class Refiner:
         # Find a term to refine.
         if not self._growth_heap:
             raise StopIteration("Refiner is exhausted.")
-        c, general = heapq.heappop(self._growth_heap)
+        c, level, general = heapq.heappop(self._growth_heap)
         if self._validity.get(general) is False:
             return
-        heapq.heappush(self._growth_heap, (c + 1, general))
+        heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
 
         # Specialize the term via every env of complexity c.
-        refinements = env_enumerator(general.free_vars)
-        level = c - refinements.baseline
-        for env in refinements.level(level):
+        for env in env_enumerator(general.free_vars).level(level):
             special = subst(general, env)
             if special in self._nodes:
                 continue
@@ -229,8 +230,9 @@ class Refiner:
 
     def _start_refining(self, general: Term) -> None:
         assert general.free_vars, "cannot refine a closed term"
+        level = 0
         c = complexity(general) + env_enumerator(general.free_vars).baseline
-        heapq.heappush(self._growth_heap, (c, general))
+        heapq.heappush(self._growth_heap, (c, level, general))
 
     def _add_edge(self, general: Term, special: Term) -> None:
         counter["refiner.add_edge"] += 1
@@ -278,7 +280,7 @@ class EnvRefiner:
         self._validity: dict[Env, bool] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Env] = [sketch]
-        self._growth_heap: list[tuple[int, Env]] = []
+        self._growth_heap: list[tuple[int, int, Env]] = []
         self._start_refining(sketch)
 
     def next_candidate(self) -> Env:
@@ -320,15 +322,13 @@ class EnvRefiner:
         # Find an environment to refine.
         if not self._growth_heap:
             raise StopIteration("EnvRefiner is exhausted.")
-        c, general = heapq.heappop(self._growth_heap)
+        c, level, general = heapq.heappop(self._growth_heap)
         if self._validity.get(general) is False:
             return
-        heapq.heappush(self._growth_heap, (c + 1, general))
+        heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
 
         # Specialize the environment via every env of complexity c.
-        refinements = env_enumerator(env_free_vars(general))
-        level = c - refinements.baseline
-        for env in refinements.level(level):
+        for env in env_enumerator(env_free_vars(general)).level(level):
             special = env_compose(general, env)
             if special in self._nodes:
                 continue
@@ -340,8 +340,9 @@ class EnvRefiner:
 
     def _start_refining(self, general: Env) -> None:
         assert env_free_vars(general), "cannot refine a closed environment"
+        level = 0
         c = env_complexity(general) + env_enumerator(env_free_vars(general)).baseline
-        heapq.heappush(self._growth_heap, (c, general))
+        heapq.heappush(self._growth_heap, (c, level, general))
 
     def _add_edge(self, general: Env, special: Env) -> None:
         counter["env_refiner.add_edge"] += 1
