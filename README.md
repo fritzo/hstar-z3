@@ -36,12 +36,12 @@ and `r` and `s` range over closed λ-join-calculus terms.
 
 ## Performance engineering resources
 
-- F* authors _Profiling Z3 and Solving Proof Performance Issues_ ([html](https://fstar-lang.org/tutorial/book/under_the_hood/uth_smt.html#profiling-z3-and-solving-proof-performance-issues)|[rst](https://github.com/FStarLang/PoP-in-FStar/tree/main/book/under_the_hood))
+- F* authors (20??) _Profiling Z3 and Solving Proof Performance Issues_ ([html](https://fstar-lang.org/tutorial/book/under_the_hood/uth_smt.html#profiling-z3-and-solving-proof-performance-issues)|[rst](https://github.com/FStarLang/PoP-in-FStar/tree/main/book/under_the_hood))
 - Michał Moskal (2009) _Programming with Triggers_ ([pdf](https://mmoskal.github.io/pdf/prtrig.pdf))
-- Oskari Jyrkinen, Jonáš Fiala, et al. _SMT Scope_ (2023) ([code](https://github.com/viperproject/smt-scope))
+- Oskari Jyrkinen, Jonáš Fiala, et al. (2023) _SMT Scope_ ([code](https://github.com/viperproject/smt-scope))
 - Nils Becker, Peter Müller, and Alexander J. Summers (2019) _The Axiom Profiler: Understanding and Debugging SMT Quantifier Instantiations_ ([pdf](https://pm.inf.ethz.ch/publications/BeckerMuellerSummers19.pdf))
-- Nikolaj Bjørner, Leonardo de Moura, Lev Nachmanson, and Christoph Wintersteiger _Programming Z3_ ([html](https://z3prover.github.io/papers/programmingz3.html))
-- Nikolaj Bjørner et. al _Z3 Internals (Draft)_ ([html](https://z3prover.github.io/papers/z3internals.html))
+- Nikolaj Bjørner, Leonardo de Moura, Lev Nachmanson, and Christoph Wintersteiger (20??) _Programming Z3_ ([html](https://z3prover.github.io/papers/programmingz3.html))
+- Nikolaj Bjørner et. al (20??) _Z3 Internals (Draft)_ ([html](https://z3prover.github.io/papers/z3internals.html))
 - Nikolaj Bjørner et. al (2021) _Supercharging Plant Configurations using Z3_ ([html](https://z3prover.github.io/papers/Supercharging.html))
 - Leonardo de Moura, Nikolaj Bjørner (2008) _Z3: An Efficient SMT Solver_ ([pdf](https://link.springer.com/content/pdf/10.1007/978-3-540-78800-3_24.pdf))
 - Z3 github issues ([link](https://github.com/Z3Prover/z3/issues?q=performance))
