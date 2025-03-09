@@ -11,21 +11,38 @@ import argparse
 import z3
 
 from hstar.bridge import py_to_z3
-from hstar.grammar import ABS, APP, VAR, Term, app
+from hstar.grammar import ABS, APP, VAR, Term, shift
 from hstar.solvers import LEQ, solver_timeout
 from hstar.synthesis import Synthesizer
 
 
 def main(args: argparse.Namespace) -> None:
+    # Basic lambda calculus definitions.
+    I = ABS(VAR(0))
+
+    def compose(f: Term, g: Term) -> Term:
+        return ABS(APP(f, APP(g, VAR(0))))
+
+    def pair(*args: Term) -> Term:
+        result = VAR(0)
+        for arg in args:
+            result = APP(result, shift(arg))
+        return ABS(result)
+
+    def fst(pair: Term) -> Term:
+        return APP(pair, ABS(ABS(VAR(1))))
+
+    def snd(pair: Term) -> Term:
+        return APP(pair, ABS(ABS(VAR(0))))
+
     # Sketch: (\x. x r s) == <r,s>
-    sketch = ABS(app(VAR(0), VAR(1), VAR(2)))
+    sketch = pair(VAR(0), VAR(1))
 
     # Constraint: s o r [= I
     def constraint(candidate: Term) -> z3.ExprRef:
-        r = APP(candidate, ABS(ABS(VAR(1))))
-        s = APP(candidate, ABS(ABS(VAR(0))))
-        s_o_r = ABS(APP(s, APP(r, VAR(0))))
-        I = ABS(VAR(0))
+        r = fst(candidate)
+        s = snd(candidate)
+        s_o_r = compose(s, r)
         return LEQ(py_to_z3(s_o_r), py_to_z3(I))
 
     synthesizer = Synthesizer(sketch, constraint)
@@ -33,7 +50,6 @@ def main(args: argparse.Namespace) -> None:
 
     print(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
     solutions: list[Term] = []
-    solutions_z3: list[z3.ExprRef] = []
     while True:
         # Find a solution to the constraints.
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
@@ -42,19 +58,22 @@ def main(args: argparse.Namespace) -> None:
 
         # Filter to solutions not dominated by previous solutions.
         # FIXME this appears to be ineffectual.
-        candidate_z3 = py_to_z3(candidate)
+        r = fst(candidate)
+        s = snd(candidate)
         with solver, solver_timeout(solver, timeout_ms=args.timeout_ms):
-            dominated = z3.Or(*(LEQ(candidate_z3, prev) for prev in solutions_z3))
+            clauses: list[z3.ExprRef] = []
+            for prev in solutions:
+                r_leq = LEQ(py_to_z3(r), py_to_z3(fst(prev)))
+                s_leq = LEQ(py_to_z3(s), py_to_z3(snd(prev)))
+                clauses.append(z3.And(r_leq, s_leq))
+            dominated = z3.Or(*clauses)
             if solver.check(dominated) == z3.sat:
                 print(".", end="", flush=True)
                 continue
 
         # Accept the solution.
-        solutions.append(candidate)
-        solutions_z3.append(candidate_z3)
-        r = APP(candidate, ABS(ABS(VAR(1))))
-        s = APP(candidate, ABS(ABS(VAR(0))))
         print(f"Found solution: <{r}, {s}>")
+        solutions.append(candidate)
 
 
 parser = argparse.ArgumentParser(

@@ -9,7 +9,10 @@ import z3
 
 from hstar import grammar, solvers
 
+from .functools import weak_key_cache
 
+
+@weak_key_cache
 def py_to_z3(term: grammar.Term) -> z3.ExprRef:
     """
     Convert a grammar.Term to a Z3 term.
