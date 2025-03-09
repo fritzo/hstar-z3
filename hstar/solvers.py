@@ -479,15 +479,25 @@ def add_theory(s: z3.Solver) -> None:
     type_theory(s)
 
 
+# https://microsoft.github.io/z3guide/programming/Parameters/#global-parameters
+DEFAULT_TIMEOUT_MS = 4294967295
+
+
 @contextmanager
-def timeout_context(solver: z3.Solver, timeout_ms: int) -> Generator[None, None, None]:
+def solver_timeout(
+    solver: z3.Solver, *, timeout_ms: int
+) -> Generator[None, None, None]:
     """Context manager to set a timeout on a Z3 solver."""
-    old_timeout = solver.timeout()
+    # This works around latch of .get() interface by patching the solver object
+    # with a .timeout_ms attribute.
+    old_timeout_ms = getattr(solver, "timeout_ms", DEFAULT_TIMEOUT_MS)
     solver.set(timeout=timeout_ms)
+    solver.timeout_ms = timeout_ms
     try:
         yield
     finally:
-        solver.set(timeout=old_timeout)
+        solver.set(timeout=old_timeout_ms)
+        solver.timeout_ms = old_timeout_ms
 
 
 def try_prove(
@@ -509,7 +519,7 @@ def try_prove(
         And the counterexample model string (if formula is not valid)
     """
     counter["try_prove"] += 1
-    with solver, timeout_context(solver, timeout_ms):
+    with solver, solver_timeout(solver, timeout_ms=timeout_ms):
         solver.add(Not(formula))
         result = solver.check()
         if result == z3.unsat:

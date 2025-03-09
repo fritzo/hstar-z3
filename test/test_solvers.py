@@ -38,6 +38,7 @@ from hstar.solvers import (
     pre_pair,
     semi,
     shift,
+    solver_timeout,
     subst,
     true_,
     unit,
@@ -62,8 +63,7 @@ def base_solver() -> z3.Solver:
 @pytest.fixture
 def solver(base_solver: z3.Solver) -> Iterator[z3.Solver]:
     """Provide a solver with a fresh scope for each test."""
-    base_solver.set(timeout=100)  # in milliseconds
-    with base_solver:
+    with base_solver, solver_timeout(base_solver, timeout_ms=100):
         yield base_solver
 
 
@@ -193,8 +193,7 @@ def test_subst_eager() -> None:
 
 def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
-    solver.set(timeout=1000)  # in milliseconds
-    with solver:
+    with solver, solver_timeout(solver, timeout_ms=1000):
         result = solver.check()
         assert result != z3.unsat
 

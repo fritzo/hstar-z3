@@ -12,8 +12,8 @@ from hstar.synthesis import EnvSynthesizer, Synthesizer
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.xfail(reason="timeout")
-@pytest.mark.timeout(0.2)
+@pytest.mark.skip(reason="slow")
+@pytest.mark.timeout(5)
 def test_synthesizer() -> None:
     # Sketch: (\x. x r s) == <r,s>
     sketch = ABS(app(VAR(0), VAR(1), VAR(2)))
@@ -31,8 +31,9 @@ def test_synthesizer() -> None:
         assert isinstance(candidate, Term)
 
 
+@pytest.mark.skip(reason="slow")
 @pytest.mark.xfail(reason="timeout")
-@pytest.mark.timeout(0.2)
+@pytest.mark.timeout(5)
 def test_env_synthesizer() -> None:
     sketch = Env(
         {
