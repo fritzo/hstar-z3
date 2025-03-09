@@ -37,7 +37,14 @@ class Synthesizer:
         add_theory(self.solver)
 
     def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
-        """Generate the next candidate and check it."""
+        """
+        Generate the next candidate and check it.
+
+        Returns:
+            A tuple `(candidate,valid)` where `candidate` is the next candidate
+            sketch (possibly with holes) and `valid` is a boolean indicating
+            whether the candidate satisfies the constraint.
+        """
         counter["synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
@@ -68,7 +75,14 @@ class EnvSynthesizer:
         add_theory(self.solver)
 
     def step(self, *, timeout_ms: int = 1000) -> tuple[Env, bool | None]:
-        """Generate the next candidate and check it."""
+        """
+        Generate the next candidate and check it.
+
+        Returns:
+            A tuple `(candidate,valid)` where `candidate` is the next candidate
+            sketch (possibly with holes) and `valid` is a boolean indicating
+            whether the candidate satisfies the constraint
+        """
         counter["env_synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")

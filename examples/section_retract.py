@@ -53,7 +53,7 @@ def main(args: argparse.Namespace) -> None:
     while True:
         # Find a solution to the constraints.
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
-        if not valid:
+        if not valid or candidate.free_vars:
             continue
         r = fst(candidate)
         s = snd(candidate)
