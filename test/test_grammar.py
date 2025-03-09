@@ -9,6 +9,7 @@ from hstar.grammar import (
     JOIN,
     TOP,
     VAR,
+    Env,
     TermType,
     _Term,
     complexity,
@@ -48,6 +49,10 @@ def test_hash_consing() -> None:
     # Test that TOP absorbs other terms in a join
     assert JOIN(TOP, VAR(0)) is TOP
 
+    # Test environments
+    assert Env() is Env()
+    assert Env({0: VAR(0)}) is Env({0: VAR(0)})
+
 
 def test_shift() -> None:
     """Test that the shift operation works correctly."""
@@ -86,33 +91,33 @@ def test_shift() -> None:
 def test_subst() -> None:
     """Test that the substitution operation works correctly."""
     # Basic variable substitution
-    assert subst(VAR(0), Map({0: TOP})) is TOP  # [TOP/0]0 = TOP
-    assert subst(VAR(1), Map({0: TOP})) is VAR(1)  # [TOP/0]1 = 1
-    assert subst(VAR(0), Map({1: TOP})) is VAR(0)  # [TOP/1]0 = 0
-    assert subst(VAR(1), Map({1: TOP})) is TOP  # [TOP/1]1 = TOP
+    assert subst(VAR(0), Env({0: TOP})) is TOP  # [TOP/0]0 = TOP
+    assert subst(VAR(1), Env({0: TOP})) is VAR(1)  # [TOP/0]1 = 1
+    assert subst(VAR(0), Env({1: TOP})) is VAR(0)  # [TOP/1]0 = 0
+    assert subst(VAR(1), Env({1: TOP})) is TOP  # [TOP/1]1 = TOP
 
     # Multiple simultaneous substitutions
-    assert subst(VAR(0), Map({0: VAR(1), 1: TOP})) is VAR(1)  # [1/0, TOP/1]0 = 1
-    assert subst(VAR(1), Map({0: VAR(2), 1: TOP})) is TOP  # [2/0, TOP/1]1 = TOP
-    actual = subst(JOIN(VAR(0), VAR(1)), Map({0: VAR(2), 1: VAR(3)}))
+    assert subst(VAR(0), Env({0: VAR(1), 1: TOP})) is VAR(1)  # [1/0, TOP/1]0 = 1
+    assert subst(VAR(1), Env({0: VAR(2), 1: TOP})) is TOP  # [2/0, TOP/1]1 = TOP
+    actual = subst(JOIN(VAR(0), VAR(1)), Env({0: VAR(2), 1: VAR(3)}))
     assert actual is JOIN(VAR(2), VAR(3))
 
     # Identity function substitution
     id_term = ABS(JOIN(VAR(0)))  # \x.x
-    assert subst(id_term, Map({0: TOP})) is id_term  # [TOP/0](\x.x) = \x.x
-    assert subst(id_term, Map({1: TOP})) is id_term  # [TOP/1](\x.x) = \x.x
+    assert subst(id_term, Env({0: TOP})) is id_term  # [TOP/0](\x.x) = \x.x
+    assert subst(id_term, Env({1: TOP})) is id_term  # [TOP/1](\x.x) = \x.x
 
     # Application substitution
     app_term = APP(VAR(0), JOIN(VAR(1)))  # 0 1
-    assert subst(app_term, Map({0: TOP})) is APP(
+    assert subst(app_term, Env({0: TOP})) is APP(
         TOP, JOIN(VAR(1))
     )  # [TOP/0](0 1) = TOP 1
-    assert subst(app_term, Map({1: TOP})) is APP(
+    assert subst(app_term, Env({1: TOP})) is APP(
         VAR(0), JOIN(TOP)
     )  # [TOP/1](0 1) = 0 TOP
 
     # Multiple substitutions in application
-    assert subst(app_term, Map({0: VAR(2), 1: TOP})) is APP(
+    assert subst(app_term, Env({0: VAR(2), 1: TOP})) is APP(
         VAR(2), JOIN(TOP)
     )  # [2/0, TOP/1](0 1) = 2 TOP
 
@@ -120,31 +125,31 @@ def test_subst() -> None:
     # \x.1 x
     nested = ABS(JOIN(APP(VAR(1), JOIN(VAR(0)))))
     # [TOP/1](\x.1 x)
-    assert subst(nested, Map({0: TOP})) is TOP
+    assert subst(nested, Env({0: TOP})) is TOP
 
     # More complex substitution cases
     complex_term = ABS(APP(VAR(0), APP(VAR(1), VAR(2))))  # \x. x (1 2)
     # When substituting for var 1
-    actual = subst(complex_term, Map({0: TOP}))
+    actual = subst(complex_term, Env({0: TOP}))
     # Expected: \x. x (TOP 2)
     expected = ABS(APP(VAR(0), TOP))
     assert actual is expected
 
     # Join substitution
     join_term = JOIN(VAR(0), VAR(1))  # 0 | 1
-    assert subst(join_term, Map({0: TOP})) is JOIN(TOP, VAR(1))
-    assert subst(join_term, Map({1: TOP})) is JOIN(VAR(0), TOP)
+    assert subst(join_term, Env({0: TOP})) is JOIN(TOP, VAR(1))
+    assert subst(join_term, Env({1: TOP})) is JOIN(VAR(0), TOP)
 
     # Multiple substitutions in join
-    assert subst(join_term, Map({0: TOP, 1: VAR(2)})) is JOIN(TOP, VAR(2))
+    assert subst(join_term, Env({0: TOP, 1: VAR(2)})) is JOIN(TOP, VAR(2))
 
     # Test BOT substitution
-    assert subst(VAR(0), Map({0: BOT})) is BOT
-    assert subst(APP(VAR(0), JOIN(VAR(1))), Map({0: BOT})) is APP(BOT, JOIN(VAR(1)))
+    assert subst(VAR(0), Env({0: BOT})) is BOT
+    assert subst(APP(VAR(0), JOIN(VAR(1))), Env({0: BOT})) is APP(BOT, JOIN(VAR(1)))
 
     # Test empty environment
-    assert subst(VAR(0), Map()) is VAR(0)
-    assert subst(APP(VAR(0), JOIN(VAR(1))), Map()) is APP(VAR(0), JOIN(VAR(1)))
+    assert subst(VAR(0), Env()) is VAR(0)
+    assert subst(APP(VAR(0), JOIN(VAR(1))), Env()) is APP(VAR(0), JOIN(VAR(1)))
 
 
 def test_abs() -> None:
@@ -227,28 +232,28 @@ def test_complexity() -> None:
 def test_env_compose() -> None:
     """Test that environment composition works correctly."""
     # Test basic environment composition
-    env1 = Map({0: VAR(1)})
-    env2 = Map({1: VAR(2)})
+    env1 = Env({0: VAR(1)})
+    env2 = Env({1: VAR(2)})
     composed = env_compose(env1, env2)
-    assert composed == Map({0: VAR(2), 1: VAR(2)})  # VAR(1) substituted to VAR(2)
+    assert composed == Env({0: VAR(2), 1: VAR(2)})  # VAR(1) substituted to VAR(2)
 
     # Test composition with empty environments
-    assert env_compose(Map(), env2) == env2
-    assert env_compose(env1, Map()) == env1
+    assert env_compose(Env(), env2) == env2
+    assert env_compose(env1, Env()) == env1
 
     # Test composition with overlapping variables
-    env3 = Map({0: VAR(2), 2: VAR(3)})
-    env4 = Map({0: VAR(4), 2: VAR(5)})
+    env3 = Env({0: VAR(2), 2: VAR(3)})
+    env4 = Env({0: VAR(4), 2: VAR(5)})
     composed = env_compose(env3, env4)
     # VAR(2) is substituted to VAR(5) due to the mapping 2->VAR(5) in env4
     # VAR(3) remains unchanged as there's no mapping for 3 in env4
-    assert composed == Map({0: VAR(5), 2: VAR(3)})
+    assert composed == Env({0: VAR(5), 2: VAR(3)})
 
     # Test the composition property:
     # subst(term, env_compose(lhs, rhs)) == subst(subst(term, lhs), rhs)
     term = JOIN(VAR(0), APP(VAR(1), VAR(2)))
-    env_a = Map({0: VAR(3), 1: VAR(4)})
-    env_b = Map({3: VAR(5), 4: VAR(6)})
+    env_a = Env({0: VAR(3), 1: VAR(4)})
+    env_b = Env({3: VAR(5), 4: VAR(6)})
 
     # Left-hand side of the equation
     lhs_result = subst(term, env_compose(env_a, env_b))
@@ -261,8 +266,8 @@ def test_env_compose() -> None:
 
     # Test with more complex terms and environments
     complex_term = APP(ABS(JOIN(VAR(0), VAR(1))), VAR(2))
-    env_c = Map({1: TOP, 2: BOT})
-    env_d = Map({0: VAR(3)})
+    env_c = Env({1: TOP, 2: BOT})
+    env_d = Env({0: VAR(3)})
 
     lhs_result = subst(complex_term, env_compose(env_c, env_d))
     rhs_result = subst(subst(complex_term, env_c), env_d)

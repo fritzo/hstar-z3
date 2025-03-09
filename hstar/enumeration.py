@@ -138,7 +138,7 @@ class EnvEnumerator:
         for partition in weighted_partitions(c, self._weights):
             factors = [enumerator.level(p) for p in partition]
             for vs in itertools.product(*factors):
-                env = Map(
+                env = Env(
                     (k, v)
                     for k, v in zip(self._keys, vs, strict=True)
                     if v is not VAR(k)
@@ -164,7 +164,7 @@ class Refiner:
     def __init__(self, sketch: Term) -> None:
         # Persistent state.
         self._sketch = sketch
-        self._nodes: dict[Term, Env] = {sketch: Map()}  # (candidate, env) -> env
+        self._nodes: dict[Term, Env] = {sketch: Env()}  # (candidate, env) -> env
         self._generalize: dict[Term, set[Term]] = defaultdict(set)  # special -> general
         self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
         self._validity: dict[Term, bool] = {}
@@ -274,7 +274,7 @@ class EnvRefiner:
         # Persistent state.
         self._sketch = sketch
         self._free_vars = env_free_vars(sketch)
-        self._nodes: dict[Env, Env] = {sketch: Map()}  # (candidate, env) -> env
+        self._nodes: dict[Env, Env] = {sketch: Env()}  # (candidate, env) -> env
         self._generalize: dict[Env, set[Env]] = defaultdict(set)  # special -> general
         self._specialize: dict[Env, set[Env]] = defaultdict(set)  # general -> special
         self._validity: dict[Env, bool] = {}

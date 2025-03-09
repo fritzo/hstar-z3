@@ -10,7 +10,7 @@ from hstar.enumeration import (
     enumerator,
     env_enumerator,
 )
-from hstar.grammar import ABS, APP, VAR, Term, app, complexity, env_free_vars
+from hstar.grammar import ABS, APP, VAR, Env, Term, app, complexity, env_free_vars
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def test_env_enumerator(free_vars: Map[int, int]) -> None:
     actual = list(itertools.islice(enumerator, 1000))
     logger.debug("\n".join(str(x) for x in actual))
     for env in actual:
-        assert isinstance(env, Map)
+        assert isinstance(env, Env)
         assert set(env.keys()) <= set(free_vars.keys())
 
 
@@ -56,10 +56,9 @@ def test_refiner() -> None:
         refiner.validate()
 
 
-@pytest.mark.xfail(reason="Env.__lt__ undefined")
 @pytest.mark.timeout(0.1)
 def test_env_refiner() -> None:
-    sketch = Map(
+    sketch = Env(
         {
             0: ABS(ABS(ABS(app(VAR(2), VAR(0), VAR(1))))),  # pair
             1: app(VAR(0), VAR(2), VAR(3)),  # <r,s>
@@ -71,5 +70,5 @@ def test_env_refiner() -> None:
     for _ in range(100):
         candidate = refiner.next_candidate()
         logger.debug(candidate)
-        assert isinstance(candidate, Map)
+        assert isinstance(candidate, Env)
         refiner.validate()

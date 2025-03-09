@@ -7,6 +7,7 @@ simplified wrt a set of rewrite rules.
 """
 
 from collections import Counter
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache, lru_cache
@@ -170,7 +171,7 @@ def _APP(head: _Term, body: Term) -> Term:
         assert head.head is not None
         if head.head.free_vars.get(0, 0) <= 1:
             body = shift(body, delta=1)
-            result = _subst(head.head, env=Map({0: body}))
+            result = _subst(head.head, env=Env({0: body}))
             return shift(result, delta=-1)
     # Construct.
     arg = _Term(
@@ -200,8 +201,32 @@ def app(*args: Term) -> Term:
     return result
 
 
-Env = Map[int, Term]
-EMPTY_ENV: Env = Map()
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class Env(Mapping[int, Term], metaclass=HashConsMeta):
+    """An environment mapping variables to terms."""
+
+    _map: Map[int, Term]
+
+    def __init__(self, *items: Mapping[int, Term] | Iterable[tuple[int, Term]]) -> None:
+        object.__setattr__(self, "_map", intern(Map(*items)))
+
+    def __getitem__(self, key: int) -> Term:
+        return self._map[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._map)
+
+    def __len__(self) -> int:
+        return len(self._map)
+
+    @weak_key_cache
+    def __repr__(self) -> str:
+        return f"Env({{{', '.join(f'{k}: {v}' for k, v in self.items())}}})"
+
+    def __lt__(self, other: "Env") -> bool:
+        self_key = (env_complexity(self), repr(self))
+        other_key = (env_complexity(other), repr(other))
+        return self_key < other_key
 
 
 @lru_cache
@@ -268,7 +293,7 @@ def env_shift(env: Env, *, start: int = 0, delta: int = 1) -> Env:
             k += delta
         v = shift(v, start=start, delta=delta)
         result[k] = v
-    return intern(Map(result))
+    return Env(result)
 
 
 @weak_key_cache
@@ -315,7 +340,7 @@ def env_compose(lhs: Env, rhs: Env) -> Env:
     for k, v in rhs.items():
         if k not in lhs:
             result[k] = v
-    return intern(Map(result))
+    return Env(result)
 
 
 @weak_key_cache
