@@ -73,6 +73,39 @@ class _Term(metaclass=HashConsMeta):
             return f"ABS({self.head})"
         raise ValueError(f"unexpected term type: {self.typ}")
 
+    @weak_key_cache
+    def __str__(self) -> str:
+        if self.typ == TermType.TOP:
+            return "⊤"
+        if self.typ == TermType.VAR:
+            return str(self.varname)
+        if self.typ == TermType.ABS:
+            assert self.head is not None
+            return f"λ {self.head}"
+        if self.typ == TermType.APP:
+            assert self.head is not None
+            assert self.body is not None
+
+            # Apply parentheses based on precedence
+            head_str = str(self.head)
+            if self.head.typ == TermType.ABS:
+                head_str = f"({head_str})"
+
+            body_str = str(self.body)
+            # Add parentheses to body if it contains a join
+            if len(self.body.parts) > 1:
+                body_str = f"({body_str})"
+            # Add parentheses to body if it's an application (right associativity)
+            elif (
+                len(self.body.parts) == 1
+                and next(iter(self.body.parts)).typ == TermType.APP
+            ):
+                body_str = f"({body_str})"
+
+            return f"{head_str} {body_str}"
+
+        raise ValueError(f"unexpected term type: {self.typ}")
+
     def __lt__(self, other: "_Term") -> bool:
         self_key = (_complexity(self), repr(self))
         other_key = (_complexity(other), repr(other))
@@ -95,6 +128,17 @@ class Term(metaclass=HashConsMeta):
         if len(self.parts) == 1:
             return repr(next(iter(self.parts)))
         return f"JOIN({', '.join(sorted(map(repr, self.parts)))})"
+
+    @weak_key_cache
+    def __str__(self) -> str:
+        if not self.parts:
+            return "⊥"
+        if len(self.parts) == 1:
+            return str(next(iter(self.parts)))
+
+        # Sort parts for consistent output
+        sorted_parts = sorted(self.parts)
+        return " | ".join(str(part) for part in sorted_parts)
 
     def __lt__(self, other: "Term") -> bool:
         self_key = (complexity(self), repr(self))
@@ -221,7 +265,13 @@ class Env(Mapping[int, Term], metaclass=HashConsMeta):
 
     @weak_key_cache
     def __repr__(self) -> str:
-        return f"Env({{{', '.join(f'{k}: {v}' for k, v in self.items())}}})"
+        return f"Env({{{', '.join(f'{k}: {repr(v)}' for k, v in self.items())}}})"
+
+    @weak_key_cache
+    def __str__(self) -> str:
+        if not self._map:
+            return "{}"
+        return "{" + ", ".join(f"{k}: {v}" for k, v in sorted(self.items())) + "}"
 
     def __lt__(self, other: "Env") -> bool:
         self_key = (env_complexity(self), repr(self))
