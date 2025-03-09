@@ -514,3 +514,28 @@ def is_deterministic(term: Term) -> bool:
     if term is TOP or len(term.parts) > 1:
         return False
     return all(map(_is_deterministic, term.parts))
+
+
+@weak_key_cache
+def _is_normal(term: _Term) -> bool:
+    """Returns whether a term is in beta normal form."""
+    if term.typ == TermType.TOP:
+        return True
+    if term.typ == TermType.VAR:
+        return True
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        if term.head.typ == TermType.ABS:
+            return False  # unreduced beta redex
+        return _is_normal(term.head)
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        return _is_normal(term.head) and is_normal(term.body)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@weak_key_cache
+def is_normal(term: Term) -> bool:
+    """Returns whether a term is in beta normal form."""
+    return all(map(_is_normal, term.parts))
