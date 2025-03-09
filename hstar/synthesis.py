@@ -33,8 +33,8 @@ class Synthesizer:
         self.sketch = sketch
         self.constraint = constraint
         self.refiner = Refiner(sketch)
-        self._solver = z3.Solver()
-        add_theory(self._solver)
+        self.solver = z3.Solver()
+        add_theory(self.solver)
 
     def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
         """Generate the next candidate and check it."""
@@ -42,7 +42,7 @@ class Synthesizer:
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
-        valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
+        valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
         if valid is True and not candidate.free_vars:
             logger.info(f"Found solution: {candidate}")
         if valid is not None:
@@ -64,8 +64,8 @@ class EnvSynthesizer:
         self.sketch = sketch
         self.constraint = constraint
         self.refiner = EnvRefiner(sketch)
-        self._solver = z3.Solver()
-        add_theory(self._solver)
+        self.solver = z3.Solver()
+        add_theory(self.solver)
 
     def step(self, *, timeout_ms: int = 1000) -> tuple[Env, bool | None]:
         """Generate the next candidate and check it."""
@@ -73,7 +73,7 @@ class EnvSynthesizer:
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
-        valid, _ = try_prove(self._solver, constraint, timeout_ms=timeout_ms)
+        valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
         if valid is not None:
             self.refiner.mark_valid(candidate, valid)
         return candidate, valid
