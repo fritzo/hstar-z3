@@ -19,19 +19,19 @@ from hstar.synthesis import Synthesizer
 def main(args: argparse.Namespace) -> None:
     # A trivial sketch.
     sketch = VAR(0)
-    
+
     # Constraint: The term must converge
     def constraint(candidate: Term) -> z3.ExprRef:
         return CONV(py_to_z3(candidate))
-    
+
     synthesizer = Synthesizer(sketch, constraint)
-    
+
     print(f"Synthesizing convergent terms with per-step timeout_ms={args.timeout_ms}")
     while True:
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid or candidate.free_vars:
             continue
-        
+
         print(f"Found convergent term: {candidate}")
 
 
@@ -48,4 +48,4 @@ parser.add_argument(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    main(args) 
+    main(args)

@@ -197,6 +197,11 @@ def test_eager_linear_reduction() -> None:
     assert ABS(BOT) is BOT
     assert APP(ABS(VAR(1)), VAR(1)) is VAR(0)
     assert APP(ABS(VAR(0)), VAR(1)) is VAR(1)
+    assert APP(ABS(APP(VAR(1), VAR(0))), BOT) is APP(VAR(0), BOT)
+    assert APP(ABS(APP(VAR(1), VAR(0))), TOP) is APP(VAR(0), TOP)
+    assert APP(ABS(APP(VAR(1), VAR(0))), VAR(0)) is APP(VAR(0), VAR(0))
+    assert APP(ABS(APP(VAR(1), VAR(0))), VAR(1)) is APP(VAR(0), VAR(1))
+    assert APP(ABS(APP(VAR(1), VAR(0))), VAR(2)) is APP(VAR(0), VAR(2))
 
 
 def test_complexity() -> None:

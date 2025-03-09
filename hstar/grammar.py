@@ -68,9 +68,9 @@ class _Term(metaclass=HashConsMeta):
         if self.typ == TermType.VAR:
             return f"VAR({self.varname})"
         if self.typ == TermType.APP:
-            return f"APP({self.head}, {self.body})"
+            return f"APP({repr(self.head)}, {repr(self.body)})"
         if self.typ == TermType.ABS:
-            return f"ABS({self.head})"
+            return f"ABS({repr(self.head)})"
         raise ValueError(f"unexpected term type: {self.typ}")
 
     @weak_key_cache
@@ -213,7 +213,13 @@ def _APP(head: _Term, body: Term) -> Term:
         return TOP
     if head.typ == TermType.ABS:
         assert head.head is not None
-        if head.head.free_vars.get(0, 0) <= 1:
+        if (
+            head.head.free_vars.get(0, 0) <= 1
+            or body is BOT
+            or body is TOP
+            or len(body.parts) == 1
+            and next(iter(body.parts)).typ == TermType.VAR
+        ):
             body = shift(body, delta=1)
             result = _subst(head.head, env=Env({0: body}))
             return shift(result, delta=-1)
