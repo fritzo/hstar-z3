@@ -408,7 +408,16 @@ def convergence_theory(s: z3.Solver) -> None:
         LEQ(APP(DIV, BOT), BOT),
         # CONV is a least fixed point
         ForAll([x], Implies(LEQ(TOP, x), CONV(x))),
-        ForAll([x], Implies(CONV(APP(x, TOP)), CONV(x))),
+        ForAll(
+            [x, y],
+            Implies(CONV(APP(x, y)), CONV(x)),
+            patterns=[CONV(APP(x, y))],  # prevents hang
+        ),
+        ForAll(
+            [x, y],
+            Implies(CONV(COMP(x, y)), CONV(x)),
+            patterns=[CONV(COMP(x, y))],  # prevents hang
+        ),
         Not(CONV(BOT)),
         ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT))),
         ForAll([x, y], Implies(LEQ(x, y), Implies(CONV(x), CONV(y)))),
@@ -416,7 +425,7 @@ def convergence_theory(s: z3.Solver) -> None:
         ForAll([x], Implies(CONV(x), LEQ(TOP, APP(DIV, x)))),
         ForAll([x], Implies(LEQ(TOP, APP(DIV, x)), CONV(x))),
         # Multi-argument functions
-        ForAll([x], Implies(CONV(x), CONV(ABS(x)))),
+        ForAll([x], Implies(CONV(x), CONV(ABS(x)))),  # FIXME restrict to closed terms?
         ForAll([x], Implies(CONV(x), CONV(APP(x, TOP)))),
     )
 
