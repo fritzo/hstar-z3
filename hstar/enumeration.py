@@ -163,7 +163,6 @@ class Refiner:
         # Persistent state.
         self._sketch = sketch
         self._nodes: dict[Term, Env] = {sketch: Map()}  # (candidate, env) -> env
-        self._edges: dict[tuple[Term, Term], Env] = {}  # (special, general) -> env
         self._generalize: dict[Term, set[Term]] = defaultdict(set)  # special -> general
         self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
         self._validity: dict[Term, bool | None] = {}
@@ -224,7 +223,6 @@ class Refiner:
             if special in self._nodes:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)
-            self._edges[special, general] = env
             self._generalize[special].add(general)
             self._specialize[general].add(special)
             heapq.heappush(self._candidate_heap, special)
@@ -239,8 +237,6 @@ class Refiner:
         """Validate the refinement DAG, for testing."""
         for special, env in self._nodes.items():
             assert subst(self._sketch, env) == special
-        for (special, general), env in self._edges.items():
-            assert subst(special, env) == general
         for special, generals in self._generalize.items():
             for general in generals:
                 assert special in self._specialize[general]
@@ -266,7 +262,6 @@ class EnvRefiner:
         self._sketch = sketch
         self._free_vars = env_free_vars(sketch)
         self._nodes: dict[Env, Env] = {sketch: Map()}  # (candidate, env) -> env
-        self._edges: dict[tuple[Env, Env], Env] = {}  # (special, general) -> env
         self._generalize: dict[Env, set[Env]] = defaultdict(set)  # special -> general
         self._specialize: dict[Env, set[Env]] = defaultdict(set)  # general -> special
         self._validity: dict[Env, bool | None] = {}
@@ -327,7 +322,6 @@ class EnvRefiner:
             if special in self._nodes:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)
-            self._edges[special, general] = env
             self._generalize[special].add(general)
             self._specialize[general].add(special)
             heapq.heappush(self._candidate_heap, special)
@@ -342,8 +336,6 @@ class EnvRefiner:
         """Validate the refinement DAG, for testing."""
         for special, env in self._nodes.items():
             assert env_compose(self._sketch, env) == special
-        for special, general in self._edges:
-            assert env_compose(special, self._edges[special, general]) == general
         for special, generals in self._generalize.items():
             for general in generals:
                 assert special in self._specialize[general]
