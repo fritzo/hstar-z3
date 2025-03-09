@@ -159,6 +159,12 @@ class Refiner:
     """
     Data structure representing the DAG of refinements of a term sketch,
     propagating validity along general-special edges.
+
+    Warning: Candidates are yielded in approximately but not exactly increasing
+    order of complexity. This is because the exploration queue is ordered by the
+    complexity of unevaluated substitution pairs `(candidate,env)`, but
+    `subst(candidate,env)` may be more or less complex than the pair complexity,
+    due to eager linear reduction.
     """
 
     def __init__(self, sketch: Term) -> None:
@@ -220,6 +226,8 @@ class Refiner:
         # Specialize the term via every env of complexity c.
         for env in env_enumerator(general.free_vars).level(level):
             special = subst(general, env)
+            # Note special may be more or less complex than the pair complexity,
+            # due to eager linear reduction.
             if special in self._nodes:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)
@@ -268,6 +276,12 @@ class EnvRefiner:
     """
     Data structure representing the DAG of refinements of an environment sketch,
     propagating validity along general-special edges.
+
+    Warning: Candidates are yielded in approximately but not exactly increasing
+    order of complexity. This is because the exploration queue is ordered by the
+    complexity of unevaluated substitution pairs `(candidate,env)`, but
+    `env_compose(candidate,env)` may be more or less complex than the pair
+    complexity, due to eager linear reduction.
     """
 
     def __init__(self, sketch: Env) -> None:
@@ -330,6 +344,8 @@ class EnvRefiner:
         # Specialize the environment via every env of complexity c.
         for env in env_enumerator(env_free_vars(general)).level(level):
             special = env_compose(general, env)
+            # Note special may be more or less complex than the pair complexity,
+            # due to eager linear reduction.
             if special in self._nodes:
                 continue
             self._nodes[special] = env_compose(self._nodes[general], env)

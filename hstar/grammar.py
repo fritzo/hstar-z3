@@ -4,6 +4,32 @@
 Our behavior synthesis search grammar will be a subset of the λ-join-calculus,
 namely those terms that are in a particular linear normal form, i.e. that are
 simplified wrt a set of rewrite rules.
+
+## Linear Reduction Rules
+
+The following eager linear reductions are applied during term construction:
+
+- Join reductions JOIN(...):
+  - JOIN(TOP, any) → TOP (TOP absorbs other terms)
+  - JOIN(BOT, t) → t (BOT is the identity element for JOIN)
+  - JOIN(t, t) → t (idempotence)
+  - JOIN is associative and commutative
+
+- Lambda/abstraction reductions ABS(...):
+  - ABS(TOP) → TOP (abstraction over TOP is TOP)
+  - ABS(BOT) → BOT (abstraction over BOT is BOT)
+
+- Beta reductions APP(ABS(...), ...):
+  - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
+    - The bound variable occurs at most once in body, or
+    - arg is BOT, TOP, or a simple variable
+
+These rules ensure terms are maintained in a canonical normal form,
+which helps avoid redundant term exploration during synthesis.
+
+Warning: eager linear reduction may increase term complexity. Hence we need to
+take care when enumerating terms, allowing the complexity of a construction
+`JOIN(...)`, `ABS(...)`, or `APP(...)` to more than the sum of their parts + 1.
 """
 
 from collections import Counter
