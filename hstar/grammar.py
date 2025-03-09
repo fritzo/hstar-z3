@@ -484,3 +484,33 @@ def subst_complexity(free_vars: Map[int, int], env: Env) -> int:
         count = free_vars.get(k, 0)
         result += count * (complexity(v) - complexity(VAR(k)))
     return result
+
+
+@weak_key_cache
+def _is_deterministic(term: _Term) -> bool:
+    """Returns whether a term is deterministic."""
+    if term.typ == TermType.TOP:
+        return False
+    if term.typ == TermType.VAR:
+        return True
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return _is_deterministic(term.head)
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        return _is_deterministic(term.head) and is_deterministic(term.body)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@weak_key_cache
+def is_deterministic(term: Term) -> bool:
+    """
+    Returns whether a term is deterministic, i.e. whether it is definable from
+    the pure λ-calculus without JOIN and TOP.
+    """
+    if not term.parts:
+        return True  # BOT is definable as e.g. (λx.x x) (λx.x x).
+    if term is TOP or len(term.parts) > 1:
+        return False
+    return all(map(_is_deterministic, term.parts))
