@@ -38,7 +38,7 @@ and `r` and `s` range over closed λ-join-calculus terms.
 
 - F* authors (20??) _Profiling Z3 and Solving Proof Performance Issues_ ([html](https://fstar-lang.org/tutorial/book/under_the_hood/uth_smt.html#profiling-z3-and-solving-proof-performance-issues)|[rst](https://github.com/FStarLang/PoP-in-FStar/tree/main/book/under_the_hood))
 - Michał Moskal (2009) _Programming with Triggers_ ([pdf](https://mmoskal.github.io/pdf/prtrig.pdf))
-- Oskari Jyrkinen, Jonáš Fiala, et al. (2023) _SMT Scope_ ([code](https://github.com/viperproject/smt-scope))
+- Oskari Jyrkinen, Jonáš Fiala, et al. (2023) _SMT Scope_ ([code](https://github.com/viperproject/smt-scope)|[webapp](https://viperproject.github.io/smt-scope/))
 - Nils Becker, Peter Müller, and Alexander J. Summers (2019) _The Axiom Profiler: Understanding and Debugging SMT Quantifier Instantiations_ ([pdf](https://pm.inf.ethz.ch/publications/BeckerMuellerSummers19.pdf))
 - Nikolaj Bjørner, Leonardo de Moura, Lev Nachmanson, and Christoph Wintersteiger (20??) _Programming Z3_ ([html](https://z3prover.github.io/papers/programmingz3.html))
 - Nikolaj Bjørner et. al (20??) _Z3 Internals (Draft)_ ([html](https://z3prover.github.io/papers/z3internals.html))

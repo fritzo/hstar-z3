@@ -21,8 +21,15 @@ TMP = os.path.join(ROOT, "tmp")
 
 def main(args: argparse.Namespace) -> None:
     # Create directory for trace file if needed
-    if args.verbose and not os.path.exists(os.path.dirname(args.trace_file)):
+    if not os.path.exists(os.path.dirname(args.trace_file)):
         os.makedirs(os.path.dirname(args.trace_file), exist_ok=True)
+
+    # Enable tracing
+    if args.trace:
+        z3.set_param('proof', True)
+        z3.set_param('mbqi.trace', True)
+        z3.set_option(trace=True)
+        z3.set_option(trace_file_name=args.trace_file)
 
     # Set up solver
     solver = z3.Solver()
@@ -53,10 +60,6 @@ def main(args: argparse.Namespace) -> None:
     if args.show_lemmas:
         solver.set("lemmas2console", True)  # Show generated lemmas
 
-    if args.verbose:
-        solver.set("trace", True)
-        solver.set("trace_file_name", args.trace_file)
-
     # Add theory and measure performance
     logger.info(f"Running Z3 theory check (timeout: {args.timeout_ms}ms)")
 
@@ -85,9 +88,9 @@ parser.add_argument(
     "--timeout-ms", type=int, default=5000, help="Solver timeout in milliseconds"
 )
 parser.add_argument(
-    "--verbose",
+    "--trace",
     action="store_true",
-    help="Enable verbose Z3 tracing",
+    help="Enable Z3 tracing",
 )
 parser.add_argument(
     "--trace-file",
