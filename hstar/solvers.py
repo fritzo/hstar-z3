@@ -24,9 +24,9 @@ counter = COUNTERS[__name__]
 Term = z3.Datatype("Term")
 Term.declare("TOP")
 Term.declare("BOT")
-Term.declare("JOIN", ("lhs", Term), ("rhs", Term))
-Term.declare("COMP", ("lhs", Term), ("rhs", Term))  # TODO remove?
-Term.declare("APP", ("lhs", Term), ("rhs", Term))
+Term.declare("JOIN", ("join_lhs", Term), ("join_rhs", Term))
+Term.declare("COMP", ("comp_lhs", Term), ("comp_rhs", Term))  # TODO remove?
+Term.declare("APP", ("app_lhs", Term), ("app_rhs", Term))
 Term.declare("VAR", ("index", z3.IntSort()))
 Term.declare("ABS", ("body", Term))
 Term = Term.create()
@@ -274,14 +274,7 @@ def de_bruijn_theory(s: z3.Solver) -> None:
     start = z3.Int("start")
     s.add(
         # SHIFT axioms
-        ForAll(
-            [i, start],
-            If(
-                i >= start,
-                SHIFT(VAR(i), start) == VAR(i + 1),
-                SHIFT(VAR(i), start) == VAR(i),
-            ),
-        ),
+        ForAll([i, start], SHIFT(VAR(i), start) == VAR(If(i >= start, i + 1, i))),
         ForAll([x, start], SHIFT(ABS(x), start) == ABS(SHIFT(x, start + 1))),
         ForAll(
             [lhs, rhs, start],
