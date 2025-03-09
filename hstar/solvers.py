@@ -264,170 +264,271 @@ def subst(i: int, replacement: z3.ExprRef, term: z3.ExprRef) -> z3.ExprRef:
     return SUBST(idx, replacement, term)
 
 
+class Adder:
+    def __init__(self, solver: z3.Solver, groupname: str) -> None:
+        self.solver = solver
+        self.groupname = groupname
+
+    def __call__(self, expr: z3.ExprRef, name: str) -> None:
+        self.solver.assert_and_track(expr, f"{self.groupname}_{name}")
+
+
 def de_bruijn_theory(s: z3.Solver) -> None:
     """Theory of de Bruijn operations SHIFT and SUBST."""
+    add = Adder(s, "de_bruijn")
     i = z3.Int("i")
     j = z3.Int("j")
     body = z3.Const("body", Term)
     lhs = z3.Const("lhs", Term)
     rhs = z3.Const("rhs", Term)
     start = z3.Int("start")
-    s.add(
-        # SHIFT axioms
+    # SHIFT axioms
+    add(
         ForAll([i, start], SHIFT(VAR(i), start) == VAR(If(i >= start, i + 1, i))),
+        "shift_var",
+    )
+    add(
         ForAll([x, start], SHIFT(ABS(x), start) == ABS(SHIFT(x, start + 1))),
+        "shift_abs",
+    )
+    add(
         ForAll(
             [lhs, rhs, start],
             SHIFT(APP(lhs, rhs), start) == APP(SHIFT(lhs, start), SHIFT(rhs, start)),
         ),
+        "shift_app",
+    )
+    add(
         ForAll(
             [lhs, rhs, start],
             SHIFT(JOIN(lhs, rhs), start) == JOIN(SHIFT(lhs, start), SHIFT(rhs, start)),
         ),
+        "shift_join",
+    )
+    add(
         ForAll(
             [lhs, rhs, start],
             SHIFT(COMP(lhs, rhs), start) == COMP(SHIFT(lhs, start), SHIFT(rhs, start)),
         ),
-        ForAll([start], SHIFT(TOP, start) == TOP),
-        ForAll([start], SHIFT(BOT, start) == BOT),
-        # SUBST axioms
+        "shift_comp",
+    )
+    add(ForAll([start], SHIFT(TOP, start) == TOP), "shift_top")
+    add(ForAll([start], SHIFT(BOT, start) == BOT), "shift_bot")
+    # SUBST axioms
+    add(
         ForAll(
             [j, i, x],
             If(j == i, SUBST(i, x, VAR(j)) == x, SUBST(i, x, VAR(j)) == VAR(j)),
         ),
+        "subst_var",
+    )
+    add(
         ForAll(
             [body, i, x],
             SUBST(i, x, ABS(body)) == ABS(SUBST(i + 1, SHIFT(x, 0), body)),
         ),
+        "subst_abs",
+    )
+    add(
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, APP(lhs, rhs)) == APP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
         ),
+        "subst_app",
+    )
+    add(
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, JOIN(lhs, rhs)) == JOIN(SUBST(i, x, lhs), SUBST(i, x, rhs)),
         ),
+        "subst_join",
+    )
+    add(
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, COMP(lhs, rhs)) == COMP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
         ),
-        ForAll([i, x], SUBST(i, x, TOP) == TOP),
-        ForAll([i, x], SUBST(i, x, BOT) == BOT),
+        "subst_comp",
     )
+    add(ForAll([i, x], SUBST(i, x, TOP) == TOP), "subst_top")
+    add(ForAll([i, x], SUBST(i, x, BOT) == BOT), "subst_bot")
 
 
 # Theory of Scott ordering.
 def order_theory(s: z3.Solver) -> None:
-    s.add(
-        # EQ is LEQ in both directions
-        ForAll([x, y], EQ(x, y) == And(LEQ(x, y), LEQ(y, x))),
-        # Basic order axioms
-        ForAll([x], LEQ(x, TOP)),  # TOP is top
-        ForAll([x], LEQ(BOT, x)),  # BOT is bottom
-        ForAll([x], LEQ(x, x)),  # Reflexivity
-        ForAll(
-            [x, y, z], Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z)))
-        ),  # Transitivity
-        Not(LEQ(TOP, BOT)),
-        # JOIN is least upper bound
-        ForAll([x, y], LEQ(x, JOIN(x, y))),  # Left component below
-        ForAll([x, y], LEQ(y, JOIN(x, y))),  # Right component below
-        ForAll(
-            [x, y, z], Implies(LEQ(x, z), Implies(LEQ(y, z), LEQ(JOIN(x, y), z)))
-        ),  # Least upper bound property
-        # JOIN is associative, commutative, and idempotent
-        ForAll([x, y], EQ(JOIN(x, y), JOIN(y, x))),
-        ForAll([x, y, z], EQ(JOIN(x, JOIN(y, z)), JOIN(JOIN(x, y), z))),
-        ForAll([x], EQ(JOIN(x, x), x)),
-        # JOIN with BOT/TOP
-        ForAll([x], EQ(JOIN(x, BOT), x)),  # BOT is identity
-        ForAll([x], EQ(JOIN(x, TOP), TOP)),  # TOP absorbs
+    add = Adder(s, "order")
+
+    # EQ is LEQ in both directions
+    add(ForAll([x, y], EQ(x, y) == And(LEQ(x, y), LEQ(y, x))), "eq_def")
+
+    # Basic order axioms
+    add(ForAll([x], LEQ(x, TOP)), "top_upper")
+    add(ForAll([x], LEQ(BOT, x)), "bot_lower")
+    add(ForAll([x], LEQ(x, x)), "leq_reflexive")
+    add(
+        ForAll([x, y, z], Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z)))),
+        "transitivity",
     )
+    add(Not(LEQ(TOP, BOT)), "top_bot")
+
+    # JOIN is least upper bound
+    add(ForAll([x, y], LEQ(x, JOIN(x, y))), "join_left_bound")
+    add(ForAll([x, y], LEQ(y, JOIN(x, y))), "join_right_bound")
+    add(
+        ForAll([x, y, z], Implies(LEQ(x, z), Implies(LEQ(y, z), LEQ(JOIN(x, y), z)))),
+        "join_least_upper",
+    )
+
+    # JOIN is associative, commutative, and idempotent
+    add(ForAll([x, y], EQ(JOIN(x, y), JOIN(y, x))), "join_commutative")
+    add(
+        ForAll([x, y, z], EQ(JOIN(x, JOIN(y, z)), JOIN(JOIN(x, y), z))),
+        "join_associative",
+    )
+    add(ForAll([x], EQ(JOIN(x, x), x)), "join_idempotent")
+
+    # JOIN with BOT/TOP
+    add(ForAll([x], EQ(JOIN(x, BOT), x)), "join_bot")
+    add(ForAll([x], EQ(JOIN(x, TOP), TOP)), "join_top")
 
 
 # Theory of lambda calculus.
 def lambda_theory(s: z3.Solver) -> None:
-    s.add(
-        # Composition properties
-        ForAll([f, g, x], EQ(APP(COMP(f, g), x), APP(f, APP(g, x)))),
-        ForAll([f], EQ(COMP(f, I), f)),
-        ForAll([f], EQ(COMP(I, f), f)),
-        ForAll([f], EQ(COMP(f, BOT), BOT)),
-        ForAll([f], EQ(COMP(BOT, f), BOT)),
-        ForAll([f], EQ(COMP(f, TOP), TOP)),
-        ForAll([f], EQ(COMP(TOP, f), TOP)),
-        # Composition is associative
-        ForAll([f, g, h], EQ(COMP(f, COMP(g, h)), COMP(COMP(f, g), h))),
-        # Composition is monotonic in both arguments
-        ForAll([f, g, h], Implies(LEQ(f, g), LEQ(COMP(f, h), COMP(g, h)))),
-        ForAll([f, g, h], Implies(LEQ(g, h), LEQ(COMP(f, g), COMP(f, h)))),
-        # Basic combinators
-        ForAll([x], EQ(APP(I, x), x)),
-        ForAll([x, y], EQ(app(K, x, y), x)),
-        ForAll([x, y, z], EQ(app(B, x, y, z), app(x, app(y, z)))),
-        ForAll([x, y, z], EQ(app(C, x, y, z), app(x, z, y))),
-        ForAll([x, y, z], EQ(app(S, x, y, z), app(x, z, app(y, z)))),
-        ForAll([f], EQ(APP(Y, f), APP(f, APP(Y, f)))),
-        # Beta reduction using Z3's SUBST
-        ForAll([x, y], EQ(APP(ABS(x), y), SUBST(0, y, x))),
-        # APP-JOIN distributivity (both directions)
-        ForAll([f, g, x], EQ(APP(JOIN(f, g), x), JOIN(APP(f, x), APP(g, x)))),
-        ForAll([f, x, y], LEQ(JOIN(APP(f, x), APP(f, y)), APP(f, JOIN(x, y)))),
-        # APP monotonicity (in both arguments)
-        ForAll([f, g, x], Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x)))),
-        ForAll([f, x, y], Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y)))),
-        # ABS monotonicity
-        ForAll([x, y], Implies(LEQ(x, y), LEQ(ABS(x), ABS(y)))),
-        # BOT/TOP preservation
-        ForAll([x], EQ(APP(BOT, x), BOT)),
-        ForAll([x], EQ(APP(TOP, x), TOP)),
-        EQ(ABS(BOT), BOT),
-        EQ(ABS(TOP), TOP),
-        # JOIN distributivity over ABS
-        ForAll([x, y], EQ(ABS(JOIN(x, y)), JOIN(ABS(x), ABS(y)))),
-        # Extensionality
-        ForAll([f, g], Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g))),
-        ForAll([f, g], Implies(ForAll([x], EQ(APP(f, x), APP(g, x))), EQ(f, g))),
-        # Eta conversion
-        ForAll([f], EQ(ABS(APP(shift(f), VAR(0))), f)),
+    add = Adder(s, "lambda")
+
+    # Composition properties
+    add(
+        ForAll([f, g, x], EQ(APP(COMP(f, g), x), APP(f, APP(g, x)))), "comp_application"
     )
+    add(ForAll([f], EQ(COMP(f, I), f)), "comp_identity_right")
+    add(ForAll([f], EQ(COMP(I, f), f)), "comp_identity_left")
+    add(ForAll([f], EQ(COMP(f, BOT), BOT)), "comp_bot_right")
+    add(ForAll([f], EQ(COMP(BOT, f), BOT)), "comp_bot_left")
+    add(ForAll([f], EQ(COMP(f, TOP), TOP)), "comp_top_right")
+    add(ForAll([f], EQ(COMP(TOP, f), TOP)), "comp_top_left")
+
+    # Composition is associative
+    add(
+        ForAll([f, g, h], EQ(COMP(f, COMP(g, h)), COMP(COMP(f, g), h))),
+        "comp_associative",
+    )
+
+    # Composition is monotonic in both arguments
+    add(
+        ForAll([f, g, h], Implies(LEQ(f, g), LEQ(COMP(f, h), COMP(g, h)))),
+        "comp_monotonic_left",
+    )
+    add(
+        ForAll([f, g, h], Implies(LEQ(g, h), LEQ(COMP(f, g), COMP(f, h)))),
+        "comp_monotonic_right",
+    )
+
+    # Basic combinators
+    add(ForAll([x], EQ(APP(I, x), x)), "combinator_I")
+    add(ForAll([x, y], EQ(app(K, x, y), x)), "combinator_K")
+    add(ForAll([x, y, z], EQ(app(B, x, y, z), app(x, app(y, z)))), "combinator_B")
+    add(ForAll([x, y, z], EQ(app(C, x, y, z), app(x, z, y))), "combinator_C")
+    add(ForAll([x, y, z], EQ(app(S, x, y, z), app(x, z, app(y, z)))), "combinator_S")
+    add(ForAll([f], EQ(APP(Y, f), APP(f, APP(Y, f)))), "combinator_Y")
+
+    # Beta reduction using Z3's SUBST
+    add(ForAll([x, y], EQ(APP(ABS(x), y), SUBST(0, y, x))), "beta_reduction")
+
+    # APP-JOIN distributivity (both directions)
+    add(
+        ForAll([f, g, x], EQ(APP(JOIN(f, g), x), JOIN(APP(f, x), APP(g, x)))),
+        "app_join_distributivity",
+    )
+    add(
+        ForAll([f, x, y], LEQ(JOIN(APP(f, x), APP(f, y)), APP(f, JOIN(x, y)))),
+        "app_join_reverse_ineq",
+    )
+
+    # APP monotonicity (in both arguments)
+    add(
+        ForAll([f, g, x], Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x)))),
+        "app_monotonic_func",
+    )
+    add(
+        ForAll([f, x, y], Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y)))),
+        "app_monotonic_arg",
+    )
+
+    # ABS monotonicity
+    add(ForAll([x, y], Implies(LEQ(x, y), LEQ(ABS(x), ABS(y)))), "abs_monotonic")
+
+    # BOT/TOP preservation
+    add(ForAll([x], EQ(APP(BOT, x), BOT)), "app_bot_preservation")
+    add(ForAll([x], EQ(APP(TOP, x), TOP)), "app_top_preservation")
+    add(EQ(ABS(BOT), BOT), "abs_bot_preservation")
+    add(EQ(ABS(TOP), TOP), "abs_top_preservation")
+
+    # JOIN distributivity over ABS
+    add(
+        ForAll([x, y], EQ(ABS(JOIN(x, y)), JOIN(ABS(x), ABS(y)))),
+        "abs_join_distributivity",
+    )
+
+    # Extensionality
+    add(
+        ForAll([f, g], Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g))),
+        "extensionality_leq",
+    )
+    add(
+        ForAll([f, g], Implies(ForAll([x], EQ(APP(f, x), APP(g, x))), EQ(f, g))),
+        "extensionality_eq",
+    )
+
+    # Eta conversion
+    add(ForAll([f], EQ(ABS(APP(shift(f), VAR(0))), f)), "eta_conversion")
 
 
 def convergence_theory(s: z3.Solver) -> None:
+    add = Adder(s, "conv")
     i = z3.Int("i")
-    s.add(
-        # DIV tests for convergence
-        EQ(DIV, APP(Y, TUPLE(TOP))),
-        ForAll([x], EQ(APP(DIV, x), APP(DIV, APP(x, TOP)))),
-        LEQ(APP(DIV, BOT), BOT),
-        # CONV is a least fixed point
-        CONV(TOP),
+
+    # DIV tests for convergence
+    add(EQ(DIV, APP(Y, TUPLE(TOP))), "div_definition")
+    add(ForAll([x], EQ(APP(DIV, x), APP(DIV, APP(x, TOP)))), "div_recursion")
+    add(LEQ(APP(DIV, BOT), BOT), "div_bot")
+
+    # CONV is a least fixed point
+    add(CONV(TOP), "top_converges")
+    add(
         ForAll(
             [x, y],
             Implies(CONV(APP(x, y)), CONV(x)),
             patterns=[CONV(APP(x, y))],  # prevents hang
         ),
+        "app_conv_lhs",
+    )
+    add(
         ForAll(
             [x, y],
             Implies(CONV(COMP(x, y)), CONV(x)),
             patterns=[CONV(COMP(x, y))],  # prevents hang
         ),
-        Not(CONV(BOT)),
-        ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT))),
-        ForAll([x, y], Implies(LEQ(x, y), Implies(CONV(x), CONV(y)))),
-        # Base cases
-        ForAll([i], CONV(VAR(i))),
-        # DIV's relation to CONV
-        ForAll([x], Implies(CONV(x), LEQ(TOP, APP(DIV, x)))),
-        ForAll([x], Implies(LEQ(TOP, APP(DIV, x)), CONV(x))),
-        # Multi-argument functions
-        ForAll([x], Implies(CONV(x), CONV(ABS(x)))),
-        ForAll([x], Implies(CONV(x), CONV(APP(x, TOP)))),
+        "comp_conv_lhs",
     )
+    add(Not(CONV(BOT)), "bot_diverges")
+    add(ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT))), "non_conv_below_bot")
+    add(ForAll([x, y], Implies(LEQ(x, y), Implies(CONV(x), CONV(y)))), "conv_monotonic")
+
+    # Base cases
+    add(ForAll([i], CONV(VAR(i))), "var_converges")
+
+    # DIV's relation to CONV
+    add(ForAll([x], Implies(CONV(x), LEQ(TOP, APP(DIV, x)))), "conv_implies_div")
+    add(ForAll([x], Implies(LEQ(TOP, APP(DIV, x)), CONV(x))), "div_implies_conv")
+
+    # Multi-argument functions
+    add(ForAll([x], Implies(CONV(x), CONV(ABS(x)))), "abs_preserves_conv")
+    add(ForAll([x], Implies(CONV(x), CONV(APP(x, TOP)))), "app_top_preserves_conv")
 
 
 def simple_theory(s: z3.Solver) -> None:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
+    add = Adder(s, "simple")
 
     def above_all_sr(candidate: z3.ExprRef) -> z3.ExprRef:
         s1, r1 = z3.Consts("s1 r1", Term)  # Different names for bound variables
@@ -436,11 +537,13 @@ def simple_theory(s: z3.Solver) -> None:
             Implies(LEQ(COMP(r1, s1), I), LEQ(TUPLE(s1, r1), candidate)),
         )
 
-    s.add(
-        # SIMPLE is above all section-retract pairs.
-        above_all_sr(SIMPLE),
-        # SIMPLE is the least such term.
+    # SIMPLE is above all section-retract pairs.
+    add(above_all_sr(SIMPLE), "simple_upper_bound")
+
+    # SIMPLE is the least such term.
+    add(
         ForAll([x], Implies(above_all_sr(x), LEQ(SIMPLE, x))),
+        "simple_least_upper_bound",
     )
 
 
@@ -450,28 +553,45 @@ def has_inhabs(t: z3.ExprRef, *inhabs: z3.ExprRef) -> z3.ExprRef:
 
 def type_theory(s: z3.Solver) -> None:
     """Theory of types and type membership."""
+    add = Adder(s, "type")
     # FIXME some rules are commented out because they cause hangs.
-    s.add(
-        # EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
-        # EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
-        # # Types are closures.
-        ForAll([t], LEQ(I, APP(TYPE, t))),
+
+    # Commented out type definitions - can be uncommented when fixed
+    # add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))), "type_def_1")
+    # add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))), "type_def_2")
+
+    # Types are closures
+    add(ForAll([t], LEQ(I, APP(TYPE, t))), "type_includes_identity")
+    add(
         ForAll([t], EQ(COMP(APP(TYPE, t), APP(TYPE, t)), APP(TYPE, t))),
-        # TYPE is a type.
-        LEQ(I, TYPE),
-        EQ(COMP(TYPE, TYPE), TYPE),
-        ForAll([t], EQ(APP(TYPE, APP(TYPE, t)), APP(TYPE, t))),
-        # ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(t, APP(TYPE, t))))),
-        # ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(APP(TYPE, t), t)))),
-        # # Inhabitants are fixed points.
-        OFTYPE(TYPE, TYPE),
-        ForAll([t], OFTYPE(APP(TYPE, t), TYPE)),
-        # has_inhabs(DIV, TOP, BOT),
-        # has_inhabs(semi, TOP, BOT, I),
-        # has_inhabs(unit, TOP, I),
-        # has_inhabs(boool, TOP, true_, false_, JOIN(true_, false_), BOT),
-        # has_inhabs(bool_, TOP, true_, false_, BOT),
+        "type_idempotent",
     )
+
+    # TYPE is a type
+    add(LEQ(I, TYPE), "type_is_a_type_1")
+    add(EQ(COMP(TYPE, TYPE), TYPE), "type_is_a_type_2")
+    add(
+        ForAll([t], EQ(APP(TYPE, APP(TYPE, t)), APP(TYPE, t))),
+        "type_application_idempotent",
+    )
+
+    # Commented out fixed point properties - can be uncommented when fixed
+    # add(ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(t, APP(TYPE, t))))),
+    #     "type_fixed_point_1")
+    # add(ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(APP(TYPE, t), t)))),
+    #     "type_fixed_point_2")
+
+    # Inhabitants are fixed points
+    add(OFTYPE(TYPE, TYPE), "type_inhabits_itself")
+    add(ForAll([t], OFTYPE(APP(TYPE, t), TYPE)), "type_app_inhabits_type")
+
+    # Commented out type inhabitant examples - can be uncommented when fixed
+    # add(has_inhabs(DIV, TOP, BOT), "div_inhabitants")
+    # add(has_inhabs(semi, TOP, BOT, I), "semi_inhabitants")
+    # add(has_inhabs(unit, TOP, I), "unit_inhabitants")
+    # add(has_inhabs(boool, TOP, true_, false_, JOIN(true_, false_), BOT),
+    #     "boool_inhabitants")
+    # add(has_inhabs(bool_, TOP, true_, false_, BOT), "bool_inhabitants")
 
 
 def add_theory(s: z3.Solver) -> None:
