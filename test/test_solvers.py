@@ -325,10 +325,7 @@ CONV_EXAMPLES = {
     r"CONV(\x.TOP)": CONV(ABS(TOP)),
     r"CONV(\x.x)": CONV(ABS(VAR(0))),
     # Two-argument functions
-    r"CONV(\x,y.x)": pytest.param(
-        CONV(ABS(ABS(VAR(1)))),
-        marks=[pytest.mark.xfail(reason="FIXME")],
-    ),
+    r"CONV(\x,y.x)": CONV(ABS(ABS(VAR(1)))),
     r"CONV(\x,y.y)": CONV(ABS(ABS(VAR(0)))),
     r"CONV(\x,y.x|y)": CONV(ABS(ABS(JOIN(VAR(0), VAR(1))))),
 }

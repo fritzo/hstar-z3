@@ -401,13 +401,14 @@ def lambda_theory(s: z3.Solver) -> None:
 
 
 def convergence_theory(s: z3.Solver) -> None:
+    i = z3.Int("i")
     s.add(
         # DIV tests for convergence
         EQ(DIV, APP(Y, TUPLE(TOP))),
         ForAll([x], EQ(APP(DIV, x), APP(DIV, APP(x, TOP)))),
         LEQ(APP(DIV, BOT), BOT),
         # CONV is a least fixed point
-        ForAll([x], Implies(LEQ(TOP, x), CONV(x))),
+        CONV(TOP),
         ForAll(
             [x, y],
             Implies(CONV(APP(x, y)), CONV(x)),
@@ -421,11 +422,13 @@ def convergence_theory(s: z3.Solver) -> None:
         Not(CONV(BOT)),
         ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT))),
         ForAll([x, y], Implies(LEQ(x, y), Implies(CONV(x), CONV(y)))),
+        # Base cases
+        ForAll([i], CONV(VAR(i))),
         # DIV's relation to CONV
         ForAll([x], Implies(CONV(x), LEQ(TOP, APP(DIV, x)))),
         ForAll([x], Implies(LEQ(TOP, APP(DIV, x)), CONV(x))),
         # Multi-argument functions
-        ForAll([x], Implies(CONV(x), CONV(ABS(x)))),  # FIXME restrict to closed terms?
+        ForAll([x], Implies(CONV(x), CONV(ABS(x)))),
         ForAll([x], Implies(CONV(x), CONV(APP(x, TOP)))),
     )
 
