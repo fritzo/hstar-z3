@@ -175,3 +175,6 @@ cython_debug/
 #.vscode/
 *.swp
 *.swo
+
+# Profiling and temp files
+tmp/
