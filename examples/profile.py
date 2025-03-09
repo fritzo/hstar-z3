@@ -6,6 +6,7 @@ Z3 Theory Profiler - Runs Z3 with theory from solvers.py and collects statistics
 import argparse
 import logging
 import os
+import subprocess
 import time
 
 import z3
@@ -26,8 +27,8 @@ def main(args: argparse.Namespace) -> None:
 
     # Enable tracing
     if args.trace:
-        z3.set_param('proof', True)
-        z3.set_param('mbqi.trace', True)
+        z3.set_param("proof", True)
+        z3.set_param("mbqi.trace", True)
         z3.set_option(trace=True)
         z3.set_option(trace_file_name=args.trace_file)
 
@@ -73,10 +74,32 @@ def main(args: argparse.Namespace) -> None:
         formulas = "\n".join(str(formula) for formula in solver.assertions())
         logger.info(f"Theory Formulas:\n{formulas}")
 
-    start = time.time()
-    result = solver.check()
-    solve_time = time.time() - start
-    logger.info(f"Result: {result} in {solve_time:.2f}s")
+    if args.subprocess:
+        smt2_path = os.path.join(TMP, "theory.smt2")
+        with open(smt2_path, "w") as f:
+            f.write(solver.to_smt2())
+
+        # Build Z3 command with options
+        cmd: list[str] = ["z3", "-st", f"-t:{args.timeout_ms}"]
+        if args.trace:
+            cmd.append("proof=true")
+            cmd.append("trace=true")
+            cmd.append(f"trace-file-name={args.trace_file}")
+        cmd.append(smt2_path)
+        logger.info(f"Running Z3 with command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        # Process the output
+        if result.returncode != 0:
+            logger.warning(
+                f"Z3 process returned non-zero exit code: {result.returncode}"
+            )
+        logger.info(f"Z3 stdout:\n{result.stdout}")
+        if result.stderr:
+            logger.warning(f"Z3 stderr:\n{result.stderr}")
+    else:
+        result = solver.check()
+        logger.info(f"Result: {result}")
 
     # Print statistics
     stats = solver.statistics()
@@ -84,6 +107,11 @@ def main(args: argparse.Namespace) -> None:
 
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--subprocess",
+    action="store_true",
+    help="Run Z3 in a subprocess",
+)
 parser.add_argument(
     "--timeout-ms", type=int, default=5000, help="Solver timeout in milliseconds"
 )
@@ -125,7 +153,8 @@ if __name__ == "__main__":
     try:
         main(parser.parse_args())
     except z3.Z3Exception as e:
-        logger.error(e.value.decode())
+        logger.error(e.value.decode() if isinstance(e.value, bytes) else str(e))
+        raise
     except Exception as e:
         logger.exception(e)
         raise
