@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP = os.path.join(ROOT, "tmp")
 
+
 def main(args: argparse.Namespace) -> None:
     # Create directory for trace file if needed
     if args.verbose and not os.path.exists(os.path.dirname(args.trace_file)):
@@ -27,6 +28,30 @@ def main(args: argparse.Namespace) -> None:
     solver = z3.Solver()
     solver.set("timeout", args.timeout_ms)
     solver.set("unsat_core", True)
+
+    # Set default solver parameters for better profiling
+    solver.set("relevancy", 2)  # More precise relevancy propagation
+    solver.set("mbqi", True)  # Enable model-based quantifier instantiation
+    solver.set("qi.max_multi_patterns", 1000)  # Allow more multi-patterns
+
+    # Enhanced profiling options with more aggressive settings
+    solver.set("qi.profile", True)  # Profile quantifier instantiations
+    solver.set("qi.profile_freq", args.qi_profile_freq)  # Frequency for profile output
+
+    # Enhanced profiling options
+    solver.set("mbqi.trace", True)  # Trace model-based quantifier instantiation
+    solver.set("proof", True)  # Enable proof generation
+
+    # Options to see more detailed quantifier instantiation info
+    solver.set("qi.eager_threshold", 5.0)  # Lower threshold for eager instantiation
+    solver.set("qi.lazy_threshold", 10.0)  # Lower threshold for lazy instantiation
+
+    # Output options
+    if args.show_instantiations:
+        solver.set("instantiations2console", True)  # Show instantiation details
+
+    if args.show_lemmas:
+        solver.set("lemmas2console", True)  # Show generated lemmas
 
     if args.verbose:
         solver.set("trace", True)
@@ -40,23 +65,24 @@ def main(args: argparse.Namespace) -> None:
     theory_time = time.time() - start
     logger.info(f"Theory added in {theory_time:.2f}s")
 
+    # Log assertions if requested
+    if args.dump_formulas:
+        formulas = "\n".join(str(formula) for formula in solver.assertions())
+        logger.info(f"Theory Formulas:\n{formulas}")
+
     start = time.time()
     result = solver.check()
     solve_time = time.time() - start
     logger.info(f"Result: {result} in {solve_time:.2f}s")
 
     # Print statistics
-    logger.info(f"Z3 Statistics:\n{solver.statistics()}")
-
-    # Print formulas if requested
-    if args.dump_formulas:
-        formulas = "\n".join(str(formula) for formula in solver.assertions())
-        logger.info(f"Theory Formulas:\n{formulas}")
+    stats = solver.statistics()
+    logger.info(f"Z3 Statistics:\n{stats}")
 
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
-    "--timeout-ms", type=int, default=1000, help="Solver timeout in milliseconds"
+    "--timeout-ms", type=int, default=5000, help="Solver timeout in milliseconds"
 )
 parser.add_argument(
     "--verbose",
@@ -73,7 +99,30 @@ parser.add_argument(
     action="store_true",
     help="Print all formulas added to solver",
 )
+parser.add_argument(
+    "--qi-profile-freq",
+    type=int,
+    default=10000,
+    help="Frequency for reporting quantifier instantiation profile "
+    "(# of instantiations)",
+)
+parser.add_argument(
+    "--show-instantiations",
+    action="store_true",
+    help="Show quantifier instantiations in console output",
+)
+parser.add_argument(
+    "--show-lemmas",
+    action="store_true",
+    help="Show lemmas in console output",
+)
 
 if __name__ == "__main__":
     setup_color_logging(level=logging.INFO)
-    main(parser.parse_args())
+    try:
+        main(parser.parse_args())
+    except z3.Z3Exception as e:
+        logger.error(e.value.decode())
+    except Exception as e:
+        logger.exception(e)
+        raise
