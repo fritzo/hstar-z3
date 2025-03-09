@@ -46,7 +46,7 @@ def main(args: argparse.Namespace) -> None:
         return LEQ(py_to_z3(s_o_r), py_to_z3(I))
 
     synthesizer = Synthesizer(sketch, constraint)
-    solver = synthesizer.solver
+    solver = synthesizer.solver  # Initialized with our theory.
 
     print(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
     solutions: list[Term] = []
@@ -55,21 +55,22 @@ def main(args: argparse.Namespace) -> None:
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid:
             continue
-
-        # Filter to solutions not dominated by previous solutions.
-        # FIXME this appears to be ineffectual.
         r = fst(candidate)
         s = snd(candidate)
-        with solver, solver_timeout(solver, timeout_ms=args.timeout_ms):
+
+        # Filter to solutions not dominated by any previous solution.
+        # FIXME this appears to be ineffectual.
+        if args.filter and solutions:
             clauses: list[z3.ExprRef] = []
             for prev in solutions:
                 r_leq = LEQ(py_to_z3(r), py_to_z3(fst(prev)))
                 s_leq = LEQ(py_to_z3(s), py_to_z3(snd(prev)))
                 clauses.append(z3.And(r_leq, s_leq))
             dominated = z3.Or(*clauses)
-            if solver.check(dominated) == z3.sat:
-                print(".", end="", flush=True)
-                continue
+            with solver_timeout(solver, timeout_ms=args.timeout_ms):
+                if solver.check(dominated) == z3.sat:
+                    print(".", end="", flush=True)
+                    continue
 
         # Accept the solution.
         print(f"Found solution: <{r}, {s}>")
@@ -84,6 +85,11 @@ parser.add_argument(
     type=int,
     default=100,
     help="Timeout for each Z3 invocation in milliseconds",
+)
+parser.add_argument(
+    "--filter",
+    action="store_true",
+    help="Filter solutions to avoid dominated ones",
 )
 
 
