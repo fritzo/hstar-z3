@@ -24,9 +24,15 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-timeout",
-    "black",
+    "black[jupyter]",
     "ruff",
     "mypy",
+    "jupyter",
+    "notebook",
+    "matplotlib",
+    "ipykernel",
+    "nbstripout",
+    "nbqa",
 ]
 
 [tool.setuptools]

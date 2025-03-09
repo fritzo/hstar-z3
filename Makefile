@@ -10,11 +10,13 @@ lint: FORCE
 	ruff check .
 	black --check .
 	mypy --install-types --non-interactive .
+	nbqa mypy .
 
 .PHONY: format
 format: FORCE
 	black .
 	ruff check --fix .
+	nbstripout notebooks/*.ipynb
 
 .PHONY: test
 test: lint FORCE
