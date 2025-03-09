@@ -4,16 +4,19 @@ Z3 Theory Profiler - Runs Z3 with theory from solvers.py and collects statistics
 """
 
 import argparse
+import logging
 import os
 import time
 
 import z3
 
+from hstar.logging import setup_color_logging
 from hstar.solvers import add_theory
+
+logger = logging.getLogger(__name__)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP = os.path.join(ROOT, "tmp")
-
 
 def main(args: argparse.Namespace) -> None:
     # Create directory for trace file if needed
@@ -30,27 +33,25 @@ def main(args: argparse.Namespace) -> None:
         solver.set("trace_file_name", args.trace_file)
 
     # Add theory and measure performance
-    print(f"Running Z3 theory check (timeout: {args.timeout_ms}ms)")
+    logger.info(f"Running Z3 theory check (timeout: {args.timeout_ms}ms)")
 
     start = time.time()
     add_theory(solver)
     theory_time = time.time() - start
-    print(f"Theory added in {theory_time:.2f}s")
+    logger.info(f"Theory added in {theory_time:.2f}s")
 
     start = time.time()
     result = solver.check()
     solve_time = time.time() - start
-    print(f"Result: {result} in {solve_time:.2f}s")
+    logger.info(f"Result: {result} in {solve_time:.2f}s")
 
     # Print statistics
-    print("\n==== Z3 Statistics ====")
-    print(solver.statistics())
+    logger.info(f"Z3 Statistics:\n{solver.statistics()}")
 
     # Print formulas if requested
     if args.dump_formulas:
-        print("\n==== Theory Formulas ====")
-        for i, formula in enumerate(solver.assertions()):
-            print(f"Formula {i+1}:\n{formula}\n")
+        formulas = "\n".join(str(formula) for formula in solver.assertions())
+        logger.info(f"Theory Formulas:\n{formulas}")
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -74,4 +75,5 @@ parser.add_argument(
 )
 
 if __name__ == "__main__":
+    setup_color_logging(level=logging.INFO)
     main(parser.parse_args())
