@@ -12,7 +12,7 @@ import z3
 
 from hstar.bridge import py_to_z3
 from hstar.grammar import ABS, APP, VAR, Term, shift
-from hstar.solvers import LEQ, solver_timeout
+from hstar.solvers import CONV, LEQ
 from hstar.synthesis import Synthesizer
 
 
@@ -38,43 +38,26 @@ def main(args: argparse.Namespace) -> None:
     # Sketch: (\x. x r s) == <r,s>
     sketch = pair(VAR(0), VAR(1))
 
-    # Constraint: s o r [= I
+    # Constraints: s o r [= I, and optionally both s and r converge.
     def constraint(candidate: Term) -> z3.ExprRef:
         r = fst(candidate)
         s = snd(candidate)
         s_o_r = compose(s, r)
-        return LEQ(py_to_z3(s_o_r), py_to_z3(I))
+        result = LEQ(py_to_z3(s_o_r), py_to_z3(I))
+        if args.nontrivial:
+            result = z3.And(result, CONV(py_to_z3(r)), CONV(py_to_z3(s)))
+        return result
 
     synthesizer = Synthesizer(sketch, constraint)
-    solver = synthesizer.solver  # Initialized with our theory.
 
     print(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
-    solutions: list[Term] = []
     while True:
-        # Find a solution to the constraints.
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid or candidate.free_vars:
             continue
         r = fst(candidate)
         s = snd(candidate)
-
-        # Filter to solutions not dominated by any previous solution.
-        # FIXME this appears to be ineffectual.
-        if args.filter and solutions:
-            clauses: list[z3.ExprRef] = []
-            for prev in solutions:
-                r_leq = LEQ(py_to_z3(r), py_to_z3(fst(prev)))
-                s_leq = LEQ(py_to_z3(s), py_to_z3(snd(prev)))
-                clauses.append(z3.And(r_leq, s_leq))
-            dominated = z3.Or(*clauses)
-            with solver_timeout(solver, timeout_ms=args.timeout_ms):
-                if solver.check(dominated) == z3.sat:
-                    print(".", end="", flush=True)
-                    continue
-
-        # Accept the solution.
         print(f"Found solution: <{r}, {s}>")
-        solutions.append(candidate)
 
 
 parser = argparse.ArgumentParser(
@@ -87,9 +70,9 @@ parser.add_argument(
     help="Timeout for each Z3 invocation in milliseconds",
 )
 parser.add_argument(
-    "--filter",
+    "--nontrivial",
     action="store_true",
-    help="Filter solutions to avoid dominated ones",
+    help="Require both r and s to be convergent",
 )
 
 
