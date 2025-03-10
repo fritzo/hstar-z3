@@ -108,7 +108,9 @@ def main(args: argparse.Namespace) -> None:
     logger.info(f"Z3 Statistics:\n{stats}")
 
 
-parser = argparse.ArgumentParser(description=__doc__)
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+)
 parser.add_argument(
     "--subprocess",
     action="store_true",
@@ -120,7 +122,7 @@ parser.add_argument(
 parser.add_argument(
     "--trace",
     action="store_true",
-    help="Enable Z3 tracing",
+    help="Enable Z3 tracing, e.g. for https://viperproject.github.io/smt-scope",
 )
 parser.add_argument(
     "--trace-file",
