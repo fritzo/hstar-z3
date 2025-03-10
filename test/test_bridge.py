@@ -59,16 +59,17 @@ EXAMPLES: list[tuple[grammar.Term, z3.ExprRef]] = [
         solvers.JOIN(solvers.VAR(0), solvers.JOIN(solvers.VAR(1), solvers.VAR(2))),
     ),
 ]
+IDS = [repr(term) for term, _ in EXAMPLES]
 
 
-@pytest.mark.parametrize("term, expr", EXAMPLES)
+@pytest.mark.parametrize("term, expr", EXAMPLES, ids=IDS)
 def test_py_to_z3(term: grammar.Term, expr: z3.ExprRef) -> None:
     """Test conversion from Python term to Z3 expression."""
     result = py_to_z3(term)
     assert z3.eq(result, expr), f"Expected {expr}, but got {result}"
 
 
-@pytest.mark.parametrize("term, expr", EXAMPLES)
+@pytest.mark.parametrize("term, expr", EXAMPLES, ids=IDS)
 def test_z3_to_py(term: grammar.Term, expr: z3.ExprRef) -> None:
     """Test conversion from Z3 expression to Python term."""
     result = z3_to_py(expr)

@@ -22,7 +22,7 @@ The following eager linear reductions are applied during term construction:
 - Beta reductions APP(ABS(...), ...):
   - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
     - The bound variable occurs at most once in body, or
-    - arg is linear
+    - arg is linear (TODO if this is too broad, narrow to BOT,TOP,VAR)
 
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.

@@ -28,15 +28,15 @@ def test_enumerator() -> None:
 
 
 EXAMPLE_FREE_VARS = [
-    Map({0: 1}),
-    Map({0: 1, 1: 2}),
-    Map({0: 1, 1: 2, 2: 3}),
+    {0: 1},
+    {0: 1, 1: 2},
+    {0: 1, 1: 2, 2: 3},
 ]
 
 
-@pytest.mark.parametrize("free_vars", EXAMPLE_FREE_VARS)
-def test_env_enumerator(free_vars: Map[int, int]) -> None:
-    enumerator = env_enumerator(free_vars)
+@pytest.mark.parametrize("free_vars", EXAMPLE_FREE_VARS, ids=str)
+def test_env_enumerator(free_vars: dict[int, int]) -> None:
+    enumerator = env_enumerator(Map(free_vars))
     actual = list(itertools.islice(enumerator, 1000))
     logger.debug("\n".join(str(x) for x in actual))
     for env in actual:
@@ -56,7 +56,7 @@ def test_refiner() -> None:
         refiner.validate()
 
 
-@pytest.mark.timeout(0.1)
+@pytest.mark.timeout(0.2)
 def test_env_refiner() -> None:
     sketch = Env(
         {

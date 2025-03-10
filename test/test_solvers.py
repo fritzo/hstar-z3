@@ -135,9 +135,7 @@ HOAS_EXAMPLES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "pythonic, expected", HOAS_EXAMPLES, ids=[str(e[0]) for e in HOAS_EXAMPLES]
-)
+@pytest.mark.parametrize("pythonic, expected", HOAS_EXAMPLES, ids=str)
 def test_hoas(pythonic: Any, expected: z3.ExprRef) -> None:
     assert hoas(pythonic) == expected
 
