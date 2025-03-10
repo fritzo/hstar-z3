@@ -22,7 +22,7 @@ The following eager linear reductions are applied during term construction:
 - Beta reductions APP(ABS(...), ...):
   - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
     - The bound variable occurs at most once in body, or
-    - arg is BOT, TOP, or a simple variable
+    - arg is linear
 
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.
@@ -239,13 +239,7 @@ def _APP(head: _Term, body: Term) -> Term:
         return TOP
     if head.typ == TermType.ABS:
         assert head.head is not None
-        if (
-            head.head.free_vars.get(0, 0) <= 1
-            or body is BOT
-            or body is TOP
-            or len(body.parts) == 1
-            and next(iter(body.parts)).typ == TermType.VAR
-        ):
+        if head.head.free_vars.get(0, 0) <= 1 or is_linear(body):
             body = shift(body, delta=1)
             result = _subst(head.head, env=Env({0: body}))
             return shift(result, delta=-1)
@@ -484,6 +478,41 @@ def subst_complexity(free_vars: Map[int, int], env: Env) -> int:
         count = free_vars.get(k, 0)
         result += count * (complexity(v) - complexity(VAR(k)))
     return result
+
+
+def _is_closed(term: _Term) -> bool:
+    """Returns whether a term is closed, i.e. has no free variables."""
+    return not term.free_vars
+
+
+def is_closed(term: Term) -> bool:
+    """Returns whether a term is closed, i.e. has no free variables."""
+    return all(map(_is_closed, term.parts))
+
+
+@weak_key_cache
+def _is_linear(term: _Term) -> bool:
+    """Returns whether a term is linear."""
+    if term.typ == TermType.TOP:
+        return True
+    if term.typ == TermType.VAR:
+        return True
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        if any(v > 1 for v in term.head.free_vars.values()):
+            return False
+        return _is_linear(term.head)
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        return _is_linear(term.head) and is_linear(term.body)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@weak_key_cache
+def is_linear(term: Term) -> bool:
+    """Returns whether a term is linear."""
+    return all(map(_is_linear, term.parts))
 
 
 @weak_key_cache
