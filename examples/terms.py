@@ -8,7 +8,7 @@ This script prints λ-join-calculus terms in order of increasing complexity.
 import argparse
 
 from hstar.enumeration import enumerator
-from hstar.grammar import complexity
+from hstar.grammar import complexity, is_closed, is_linear
 
 
 def main(args: argparse.Namespace) -> None:
@@ -18,8 +18,12 @@ def main(args: argparse.Namespace) -> None:
 
     count = 0
     for term in enumerator:
-        # Skip terms with free variables if --closed is specified
-        if args.closed and term.free_vars:
+        # Filter to subsets of terms
+        if args.closed and not is_closed(term):
+            continue
+        if args.linear and not is_linear(term):
+            continue
+        if args.nonlinear and is_linear(term):
             continue
 
         print(f"{complexity(term)}\t{term}")
@@ -38,6 +42,17 @@ parser.add_argument(
     "--closed",
     action="store_true",
     help="Only show closed terms (without free variables)",
+)
+group = parser.add_mutually_exclusive_group()
+group.add_argument(
+    "--linear",
+    action="store_true",
+    help="Only show linear terms",
+)
+group.add_argument(
+    "--nonlinear",
+    action="store_true",
+    help="Only show non-linear terms",
 )
 
 if __name__ == "__main__":
