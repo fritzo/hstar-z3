@@ -81,6 +81,8 @@ def main(args: argparse.Namespace) -> None:
 
         # Build Z3 command with options
         cmd: list[str] = ["z3", "-st", f"-t:{args.timeout_ms}"]
+        cmd.append("smt.mbqi=true")  # appears to have no effect
+        cmd.append("smt.mbqi.trace=true")
         if args.trace:
             cmd.append("proof=true")
             cmd.append("trace=true")
