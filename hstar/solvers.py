@@ -554,11 +554,10 @@ def has_inhabs(t: z3.ExprRef, *inhabs: z3.ExprRef) -> z3.ExprRef:
 def type_theory(s: z3.Solver) -> None:
     """Theory of types and type membership."""
     add = Adder(s, "type")
-    # FIXME some rules are commented out because they cause hangs.
 
-    # Commented out type definitions - can be uncommented when fixed
-    # add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))), "type_def_1")
-    # add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))), "type_def_2")
+    # Definition of TYPE
+    add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))), "type_def_1")
+    add(EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))), "type_def_2")
 
     # Types are closures
     add(ForAll([t], LEQ(I, APP(TYPE, t))), "type_includes_identity")
@@ -574,24 +573,26 @@ def type_theory(s: z3.Solver) -> None:
         ForAll([t], EQ(APP(TYPE, APP(TYPE, t)), APP(TYPE, t))),
         "type_application_idempotent",
     )
-
-    # Commented out fixed point properties - can be uncommented when fixed
-    # add(ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(t, APP(TYPE, t))))),
-    #     "type_fixed_point_1")
-    # add(ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(APP(TYPE, t), t)))),
-    #     "type_fixed_point_2")
+    add(
+        ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(t, APP(TYPE, t))))),
+        "type_fixed_point_1",
+    )
+    add(
+        ForAll([t], EQ(APP(TYPE, t), JOIN(I, COMP(APP(TYPE, t), t)))),
+        "type_fixed_point_2",
+    )
 
     # Inhabitants are fixed points
     add(OFTYPE(TYPE, TYPE), "type_inhabits_itself")
     add(ForAll([t], OFTYPE(APP(TYPE, t), TYPE)), "type_app_inhabits_type")
-
-    # Commented out type inhabitant examples - can be uncommented when fixed
-    # add(has_inhabs(DIV, TOP, BOT), "div_inhabitants")
-    # add(has_inhabs(semi, TOP, BOT, I), "semi_inhabitants")
-    # add(has_inhabs(unit, TOP, I), "unit_inhabitants")
-    # add(has_inhabs(boool, TOP, true_, false_, JOIN(true_, false_), BOT),
-    #     "boool_inhabitants")
-    # add(has_inhabs(bool_, TOP, true_, false_, BOT), "bool_inhabitants")
+    add(has_inhabs(DIV, TOP, BOT), "div_inhabitants")
+    add(has_inhabs(semi, TOP, BOT, I), "semi_inhabitants")
+    add(has_inhabs(unit, TOP, I), "unit_inhabitants")
+    add(
+        has_inhabs(boool, TOP, true_, false_, JOIN(true_, false_), BOT),
+        "boool_inhabitants",
+    )
+    add(has_inhabs(bool_, TOP, true_, false_, BOT), "bool_inhabitants")
 
 
 def add_theory(s: z3.Solver) -> None:
