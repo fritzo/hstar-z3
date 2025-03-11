@@ -11,8 +11,8 @@ from collections.abc import Callable
 import z3
 
 from .enumeration import EnvRefiner, Refiner
-from .grammar import Env, Term
 from .metrics import COUNTERS
+from .normal import Env, Term
 from .solvers import add_theory, try_prove
 
 logger = logging.getLogger(__name__)

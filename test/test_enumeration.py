@@ -10,7 +10,7 @@ from hstar.enumeration import (
     enumerator,
     env_enumerator,
 )
-from hstar.grammar import ABS, APP, VAR, Env, Term, app, complexity, env_free_vars
+from hstar.normal import ABS, APP, VAR, Env, Term, app, complexity, env_free_vars
 
 logger = logging.getLogger(__name__)
 

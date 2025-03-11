@@ -5,7 +5,7 @@ import z3
 from immutables import Map
 
 from hstar.bridge import nf_to_z3
-from hstar.grammar import ABS, APP, VAR, Env, Term, app, env_free_vars
+from hstar.normal import ABS, APP, VAR, Env, Term, app, env_free_vars
 from hstar.solvers import LEQ
 from hstar.synthesis import EnvSynthesizer, Synthesizer
 

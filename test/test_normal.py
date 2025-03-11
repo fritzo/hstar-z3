@@ -2,7 +2,7 @@ import logging
 
 from immutables import Map
 
-from hstar.grammar import (
+from hstar.normal import (
     ABS,
     APP,
     BOT,

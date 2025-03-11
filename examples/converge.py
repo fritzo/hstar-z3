@@ -11,7 +11,7 @@ import argparse
 import z3
 
 from hstar.bridge import nf_to_z3
-from hstar.grammar import VAR, Term
+from hstar.normal import VAR, Term
 from hstar.solvers import CONV
 from hstar.synthesis import Synthesizer
 

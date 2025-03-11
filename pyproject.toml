@@ -96,7 +96,7 @@ no_implicit_optional = true
 strict_optional = true
 
 [[tool.mypy.overrides]]
-module = "hstar.grammar"
+module = "hstar.normal"
 disable_error_code = ["misc"]  
 
 [[tool.mypy.overrides]]

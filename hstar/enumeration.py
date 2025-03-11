@@ -15,7 +15,9 @@ from functools import cache
 
 from immutables import Map
 
-from .grammar import (
+from .itertools import weighted_partitions
+from .metrics import COUNTERS
+from .normal import (
     ABS,
     APP,
     BOT,
@@ -31,8 +33,6 @@ from .grammar import (
     subst,
     subst_complexity,
 )
-from .itertools import weighted_partitions
-from .metrics import COUNTERS
 
 counter = COUNTERS[__name__]
 
