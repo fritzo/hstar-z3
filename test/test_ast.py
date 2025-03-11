@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from hstar.ast import ABS, APP, BOT, JOIN, TOP, VAR, Term, py_to_ast
+from hstar.ast import ABS, APP, BOT, COMP, JOIN, TOP, VAR, Term, py_to_ast
 
 EXAMPLES: list[tuple[Any, Term]] = [
     (lambda x: x, ABS(VAR(0))),
@@ -62,6 +62,22 @@ EXAMPLES: list[tuple[Any, Term]] = [
     (
         lambda f: lambda x: f(lambda y: x(y)),
         ABS(ABS(APP(VAR(1), ABS(APP(VAR(1), VAR(0)))))),
+    ),
+    # Function composition examples
+    (lambda f, g: f * g, ABS(ABS(COMP(VAR(1), VAR(0))))),
+    (lambda f, g, x: (f * g)(x), ABS(ABS(ABS(APP(COMP(VAR(2), VAR(1)), VAR(0)))))),
+    # The multiply operator creating composition
+    (lambda f, g, x: f * g * x, ABS(ABS(ABS(COMP(COMP(VAR(2), VAR(1)), VAR(0)))))),
+    (lambda f, g, h: f * (g * h), ABS(ABS(ABS(COMP(VAR(2), COMP(VAR(1), VAR(0))))))),
+    # More complex compositions
+    (
+        lambda f, g, h: (f * g) | (g * h),
+        ABS(ABS(ABS(JOIN(COMP(VAR(2), VAR(1)), COMP(VAR(1), VAR(0)))))),
+    ),
+    # Composition with application
+    (
+        lambda f, g, x, y: f(x) * g(y),
+        ABS(ABS(ABS(ABS(COMP(APP(VAR(3), VAR(1)), APP(VAR(2), VAR(0))))))),
     ),
 ]
 

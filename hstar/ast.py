@@ -8,20 +8,20 @@ import types
 from dataclasses import dataclass
 from typing import Any, Optional
 
+_next_fresh = 0
+
 
 class TermType(enum.Enum):
     """Enum representing the different types of terms in the λ-join-calculus."""
 
-    TOP = "TOP"
-    BOT = "BOT"
-    VAR = "VAR"
-    ABS = "ABS"
-    APP = "APP"
-    JOIN = "JOIN"
-    _FRESH = "_FRESH"  # temporary for use in py_to_ast
-
-
-_next_fresh = 0
+    TOP = "TOP"  # Top element
+    BOT = "BOT"  # Bottom element
+    VAR = "VAR"  # de Bruijn variable
+    ABS = "ABS"  # Abstraction
+    APP = "APP"  # Application
+    COMP = "COMP"  # Function composition
+    JOIN = "JOIN"  # Join wrt the Scott order
+    _FRESH = "_FRESH"  # temporary for use in py_to_ast()
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,8 +31,8 @@ class Term:
     type: TermType
     varname: int | None = None  # For VAR and FRESH
     body: Optional["Term"] = None  # For ABS
-    lhs: Optional["Term"] = None  # For APP and JOIN
-    rhs: Optional["Term"] = None  # For APP and JOIN
+    lhs: Optional["Term"] = None  # For APP, JOIN, and COMP
+    rhs: Optional["Term"] = None  # For APP, JOIN, and COMP
 
     def __call__(self, *args: Any) -> "Term":
         result = self
@@ -45,6 +45,12 @@ class Term:
 
     def __ror__(self, other: Any) -> "Term":
         return JOIN(py_to_ast(other), self)
+
+    def __mul__(self, other: Any) -> "Term":
+        return COMP(self, py_to_ast(other))
+
+    def __rmul__(self, other: Any) -> "Term":
+        return COMP(py_to_ast(other), self)
 
     def __repr__(self) -> str:
         if self.type == TermType.TOP:
@@ -59,6 +65,8 @@ class Term:
             return f"APP({self.lhs}, {self.rhs})"
         elif self.type == TermType.JOIN:
             return f"JOIN({self.lhs}, {self.rhs})"
+        elif self.type == TermType.COMP:
+            return f"COMP({self.lhs}, {self.rhs})"
         elif self.type == TermType._FRESH:
             return f"_FRESH({self.varname})"
         else:
@@ -89,6 +97,11 @@ def APP(lhs: Term, rhs: Term) -> Term:
 def JOIN(lhs: Term, rhs: Term) -> Term:
     """Create a join term."""
     return Term(type=TermType.JOIN, lhs=lhs, rhs=rhs)
+
+
+def COMP(lhs: Term, rhs: Term) -> Term:
+    """Create a composition term (f ∘ g)."""
+    return Term(type=TermType.COMP, lhs=lhs, rhs=rhs)
 
 
 def _FRESH() -> Term:
@@ -132,6 +145,10 @@ def shift(term: Term, cutoff: int = 0, delta: int = 1) -> Term:
         if term.lhs is not None and term.rhs is not None:
             return JOIN(shift(term.lhs, cutoff, delta), shift(term.rhs, cutoff, delta))
         return term
+    elif term.type == TermType.COMP:
+        if term.lhs is not None and term.rhs is not None:
+            return COMP(shift(term.lhs, cutoff, delta), shift(term.rhs, cutoff, delta))
+        return term
     else:
         raise TypeError(f"Unknown term type: {term.type}")
 
@@ -172,6 +189,12 @@ def _fresh_to_var(term: Term, fresh_varname: int, depth: int = 0) -> Term:
         lhs = _fresh_to_var(term.lhs, fresh_varname, depth)
         rhs = _fresh_to_var(term.rhs, fresh_varname, depth)
         return JOIN(lhs, rhs)
+    if term.type == TermType.COMP:
+        assert term.lhs is not None
+        assert term.rhs is not None
+        lhs = _fresh_to_var(term.lhs, fresh_varname, depth)
+        rhs = _fresh_to_var(term.rhs, fresh_varname, depth)
+        return COMP(lhs, rhs)
     raise TypeError(f"Unknown term type: {term.type}")
 
 
