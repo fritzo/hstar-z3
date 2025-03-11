@@ -4,7 +4,7 @@ import pytest
 import z3
 from immutables import Map
 
-from hstar.bridge import py_to_z3
+from hstar.bridge import nf_to_z3
 from hstar.grammar import ABS, APP, VAR, Env, Term, app, env_free_vars
 from hstar.solvers import LEQ
 from hstar.synthesis import EnvSynthesizer, Synthesizer
@@ -22,7 +22,7 @@ def test_synthesizer() -> None:
     def constraint(candidate: Term) -> z3.ExprRef:
         lhs = APP(candidate, ABS(ABS(ABS(APP(VAR(1), APP(VAR(2), VAR(0)))))))
         rhs = ABS(VAR(0))
-        return LEQ(py_to_z3(lhs), py_to_z3(rhs))
+        return LEQ(nf_to_z3(lhs), nf_to_z3(rhs))
 
     synthesizer = Synthesizer(sketch, constraint)
     for _ in range(10):
@@ -48,7 +48,7 @@ def test_env_synthesizer() -> None:
         CB = ABS(ABS(ABS(APP(VAR(1), APP(VAR(2), VAR(0))))))
         lhs = APP(rs, CB)
         rhs = ABS(VAR(0))
-        return LEQ(py_to_z3(lhs), py_to_z3(rhs))
+        return LEQ(nf_to_z3(lhs), nf_to_z3(rhs))
 
     synthesizer = EnvSynthesizer(sketch, constraint)
     for _ in range(10):

@@ -4,7 +4,7 @@ import pytest
 import z3
 
 from hstar import grammar, solvers
-from hstar.bridge import py_to_z3, z3_to_py
+from hstar.bridge import nf_to_z3, z3_to_nf
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +65,12 @@ IDS = [repr(term) for term, _ in EXAMPLES]
 @pytest.mark.parametrize("term, expr", EXAMPLES, ids=IDS)
 def test_py_to_z3(term: grammar.Term, expr: z3.ExprRef) -> None:
     """Test conversion from Python term to Z3 expression."""
-    result = py_to_z3(term)
+    result = nf_to_z3(term)
     assert z3.eq(result, expr), f"Expected {expr}, but got {result}"
 
 
 @pytest.mark.parametrize("term, expr", EXAMPLES, ids=IDS)
 def test_z3_to_py(term: grammar.Term, expr: z3.ExprRef) -> None:
     """Test conversion from Z3 expression to Python term."""
-    result = z3_to_py(expr)
+    result = z3_to_nf(expr)
     assert result == term, f"Expected {term}, but got {result}"

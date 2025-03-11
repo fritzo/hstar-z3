@@ -10,7 +10,7 @@ import argparse
 
 import z3
 
-from hstar.bridge import py_to_z3
+from hstar.bridge import nf_to_z3
 from hstar.grammar import ABS, APP, VAR, Term, shift
 from hstar.solvers import CONV, LEQ
 from hstar.synthesis import Synthesizer
@@ -43,9 +43,9 @@ def main(args: argparse.Namespace) -> None:
         r = fst(candidate)
         s = snd(candidate)
         s_o_r = compose(s, r)
-        result = LEQ(py_to_z3(s_o_r), py_to_z3(I))
+        result = LEQ(nf_to_z3(s_o_r), nf_to_z3(I))
         if args.nontrivial:
-            result = z3.And(result, CONV(py_to_z3(r)), CONV(py_to_z3(s)))
+            result = z3.And(result, CONV(nf_to_z3(r)), CONV(nf_to_z3(s)))
         return result
 
     synthesizer = Synthesizer(sketch, constraint)

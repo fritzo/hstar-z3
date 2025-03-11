@@ -13,9 +13,9 @@ from .functools import weak_key_cache
 
 
 @weak_key_cache
-def py_to_z3(term: grammar.Term) -> z3.ExprRef:
+def nf_to_z3(term: grammar.Term) -> z3.ExprRef:
     """
-    Convert a grammar.Term to a Z3 term.
+    Convert a grammar.Term normal form to a Z3 term.
 
     Args:
         term: A grammar.Term instance
@@ -30,7 +30,7 @@ def py_to_z3(term: grammar.Term) -> z3.ExprRef:
     # If there's just one part, convert it directly
     if len(term.parts) == 1:
         part = next(iter(term.parts))
-        return _py_to_z3(part)
+        return _nf_to_z3(part)
 
     # For example with term11, we need to carefully construct the JOIN
     # in a right-associative way as expected by the tests
@@ -38,18 +38,18 @@ def py_to_z3(term: grammar.Term) -> z3.ExprRef:
     sorted_parts = sorted(term.parts)
 
     # Build the JOIN tree in right-associative order (last two elements first)
-    result = _py_to_z3(sorted_parts[-1])
+    result = _nf_to_z3(sorted_parts[-1])
     for part in reversed(sorted_parts[1:-1]):
-        result = solvers.JOIN(_py_to_z3(part), result)
-    return solvers.JOIN(_py_to_z3(sorted_parts[0]), result)
+        result = solvers.JOIN(_nf_to_z3(part), result)
+    return solvers.JOIN(_nf_to_z3(sorted_parts[0]), result)
 
     # This should never happen (length would be 0 or 1, handled above)
     raise ValueError("Unexpected term parts length")
 
 
-def _py_to_z3(term: grammar._Term) -> z3.ExprRef:
+def _nf_to_z3(term: grammar._Term) -> z3.ExprRef:
     """
-    Convert a grammar._Term to a Z3 term.
+    Convert a grammar._Term normal form to a Z3 term.
 
     Args:
         term: A grammar._Term instance
@@ -65,14 +65,14 @@ def _py_to_z3(term: grammar._Term) -> z3.ExprRef:
 
     elif term.typ == grammar.TermType.ABS:
         assert term.head is not None
-        body_z3 = _py_to_z3(term.head)
+        body_z3 = _nf_to_z3(term.head)
         return solvers.ABS(body_z3)
 
     elif term.typ == grammar.TermType.APP:
         assert term.head is not None
         assert term.body is not None
-        head_z3 = _py_to_z3(term.head)
-        body_z3 = py_to_z3(term.body)
+        head_z3 = _nf_to_z3(term.head)
+        body_z3 = nf_to_z3(term.body)
         return solvers.APP(head_z3, body_z3)
 
     raise ValueError(f"Unexpected term type: {term.typ}")
@@ -82,9 +82,9 @@ class InvalidExpr(Exception):
     pass
 
 
-def z3_to_py(term: z3.ExprRef) -> grammar.Term:
+def z3_to_nf(term: z3.ExprRef) -> grammar.Term:
     """
-    Convert a ground Z3 term to a grammar.Term.
+    Convert a ground Z3 term to a grammar.Term normal form.
 
     Args:
         term: A Z3 term expression
@@ -117,19 +117,19 @@ def z3_to_py(term: z3.ExprRef) -> grammar.Term:
             elif decl_name == "ABS":
                 # Handle ABS constructor
                 body = term.arg(0)
-                return grammar.ABS(z3_to_py(body))
+                return grammar.ABS(z3_to_nf(body))
 
             elif decl_name == "APP":
                 # Handle APP constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return grammar.APP(z3_to_py(lhs), z3_to_py(rhs))
+                return grammar.APP(z3_to_nf(lhs), z3_to_nf(rhs))
 
             elif decl_name == "JOIN":
                 # Handle JOIN constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return grammar.JOIN(z3_to_py(lhs), z3_to_py(rhs))
+                return grammar.JOIN(z3_to_nf(lhs), z3_to_nf(rhs))
 
             elif decl_name == "COMP":
                 # Handle COMP constructor - we'll convert to a lambda term
@@ -138,8 +138,8 @@ def z3_to_py(term: z3.ExprRef) -> grammar.Term:
                 g = term.arg(1)
                 # Create the equivalent lambda term: λx. f(g(x))
                 x_var = grammar.VAR(0)
-                g_x = grammar.APP(z3_to_py(g), x_var)
-                f_g_x = grammar.APP(z3_to_py(f), g_x)
+                g_x = grammar.APP(z3_to_nf(g), x_var)
+                f_g_x = grammar.APP(z3_to_nf(f), g_x)
                 return grammar.ABS(f_g_x)
 
     except Exception as e:

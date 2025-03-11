@@ -10,7 +10,7 @@ import argparse
 
 import z3
 
-from hstar.bridge import py_to_z3
+from hstar.bridge import nf_to_z3
 from hstar.grammar import VAR, Term
 from hstar.solvers import CONV
 from hstar.synthesis import Synthesizer
@@ -22,7 +22,7 @@ def main(args: argparse.Namespace) -> None:
 
     # Constraint: The term must converge
     def constraint(candidate: Term) -> z3.ExprRef:
-        return CONV(py_to_z3(candidate))
+        return CONV(nf_to_z3(candidate))
 
     synthesizer = Synthesizer(sketch, constraint)
 
