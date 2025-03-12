@@ -14,7 +14,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
 import z3
-from z3 import And, ForAll, If, Implies, Not, Or
+from z3 import And, ForAll, If, Implies, MultiPattern, Not, Or
 
 from .metrics import COUNTERS
 
@@ -344,6 +344,7 @@ def order_theory(s: z3.Solver) -> None:
         ForAll(
             [x, y, z],
             Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z))),
+            patterns=[MultiPattern(LEQ(x, y), LEQ(y, z))],
             qid="leq_trans",
         ),
         Not(LEQ(TOP, BOT)),
@@ -353,6 +354,7 @@ def order_theory(s: z3.Solver) -> None:
         ForAll(
             [x, y, z],
             Implies(LEQ(x, z), Implies(LEQ(y, z), LEQ(JOIN(x, y), z))),
+            patterns=[MultiPattern(LEQ(x, z), LEQ(y, z), JOIN(x, y))],
             qid="join_lub",
         ),  # Least upper bound property
         # JOIN is associative, commutative, and idempotent
@@ -415,13 +417,24 @@ def lambda_theory(s: z3.Solver) -> None:
         ),
         # APP monotonicity (in both arguments)
         ForAll(
-            [f, g, x], Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x))), qid="app_mono_fun"
+            [f, g, x],
+            Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x))),
+            patterns=[MultiPattern(LEQ(f, g), APP(f, x), APP(g, x))],
+            qid="app_mono_fun",
         ),
         ForAll(
-            [f, x, y], Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y))), qid="app_mono_arg"
+            [f, x, y],
+            Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y))),
+            patterns=[MultiPattern(LEQ(x, y), APP(f, x), APP(f, y))],
+            qid="app_mono_arg",
         ),
         # ABS monotonicity
-        ForAll([x, y], Implies(LEQ(x, y), LEQ(ABS(x), ABS(y))), qid="abs_mono"),
+        ForAll(
+            [x, y],
+            Implies(LEQ(x, y), LEQ(ABS(x), ABS(y))),
+            patterns=[MultiPattern(LEQ(x, y), ABS(x), ABS(y))],
+            qid="abs_mono",
+        ),
         # BOT/TOP preservation
         ForAll([x], EQ(APP(BOT, x), BOT), qid="app_bot"),
         ForAll([x], EQ(APP(TOP, x), TOP), qid="app_top"),
@@ -468,7 +481,12 @@ def convergence_theory(s: z3.Solver) -> None:
         ),
         Not(CONV(BOT)),
         ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT)), qid="nonconv_bot"),
-        ForAll([x, y], Implies(LEQ(x, y), Implies(CONV(x), CONV(y))), qid="conv_mono"),
+        ForAll(
+            [x, y],
+            Implies(LEQ(x, y), Implies(CONV(x), CONV(y))),
+            patterns=[MultiPattern(LEQ(x, y), CONV(x))],
+            qid="conv_mono",
+        ),
         # Base cases
         ForAll([i], CONV(VAR(i)), qid="conv_var"),
         # DIV's relation to CONV
