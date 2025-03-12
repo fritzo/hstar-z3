@@ -26,6 +26,8 @@ class TraceStats(TypedDict):
     pattern_triggers: Counter[str]
     match_to_instance: Counter[str]
     proof_steps: Counter[str]
+    instance_source: Counter[str]
+    instantiation_depth: Counter[int]
 
 
 def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
@@ -38,13 +40,16 @@ def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
         "pattern_triggers": Counter(),
         "match_to_instance": Counter(),
         "proof_steps": Counter(),
+        "instance_source": Counter(),
+        "instantiation_depth": Counter(),
     }
     id_to_name: dict[str, str] = {}
     id_to_pattern: dict[str, set[str]] = defaultdict(set)
     last_discovered_id: str | None = None
     match_to_instance_map: dict[str, int] = {}
-    quant_instantiation_count: Counter[str] = Counter()
-    quant_proof_steps: Counter[str] = Counter()
+
+    # Track depth of instantiation chains
+    instance_depth: dict[str, int] = {}
 
     # Process the file line by line
     with open(filename) as f:
@@ -103,6 +108,9 @@ def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
                     source = parts[0]
                     stats["pattern_triggers"][source] += 1
 
+                    # Track the source of instantiation
+                    stats["instance_source"][source] += 1
+
             elif cmd == "instance":
                 # Format: [instance] hash_id proof_id ; depth
                 parts = args.strip().split()
@@ -115,10 +123,11 @@ def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
                         if last_discovered_id in match_to_instance_map:
                             match_to_instance_map[last_discovered_id] += 1
 
-                    # Track which quantifiers are being instantiated most
-                    if len(parts) >= 2 and parts[1] in id_to_name:
-                        quant_name = id_to_name[parts[1]]
-                        quant_instantiation_count[quant_name] += 1
+                    # Track instantiation depth if available
+                    if len(parts) >= 3 and parts[2].isdigit():
+                        depth = int(parts[2])
+                        instance_depth[instance_hash] = depth
+                        stats["instantiation_depth"][depth] += 1
 
             elif cmd == "mk-proof":
                 # Track proof steps by type
@@ -126,11 +135,6 @@ def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
                 if len(parts) >= 2:
                     proof_type = parts[1]
                     stats["proof_steps"][proof_type] += 1
-
-                    # If this proof is related to a quantifier, track that
-                    if len(parts) >= 3 and parts[2] in id_to_name:
-                        quant_name = id_to_name[parts[2]]
-                        quant_proof_steps[quant_name] += 1
 
             # Add a basic progress indicator for large files
             if i % 1000000 == 0 and i > 0:
@@ -149,17 +153,37 @@ def truncate_stats(stats: TraceStats, top_n: int = 10) -> None:
     Truncate the statistics to show only the top N items in each category.
     """
 
-    def truncate(stats: Counter[str]) -> None:
-        total = sum(stats.values())
-        most_common = dict(stats.most_common(top_n))
+    def truncate(stats_counter: Counter[str]) -> None:
+        total = sum(stats_counter.values())
+        most_common = dict(stats_counter.most_common(top_n))
         most_common["(total)"] = total
-        stats.clear()
-        stats.update(dict(most_common))
+        stats_counter.clear()
+        stats_counter.update(dict(most_common))
 
     truncate(stats["commands"])
     truncate(stats["new_match"])
     truncate(stats["pattern_triggers"])
     truncate(stats["proof_steps"])
+    truncate(stats["instance_source"])
+
+    # Convert instantiation depth to percentage
+    total_instances = sum(stats["instantiation_depth"].values())
+    if total_instances > 0:
+        depth_percentage = {
+            f"depth {k}": (v / total_instances) * 100
+            for k, v in stats["instantiation_depth"].items()
+        }
+        # Sort by depth
+        sorted_depths = sorted(
+            depth_percentage.items(), key=lambda x: int(x[0].split()[1])
+        )
+        # Take top_n depths
+        if len(sorted_depths) > top_n:
+            sorted_depths = sorted_depths[:top_n]
+        stats["instantiation_depth"].clear()
+        stats["instantiation_depth"].update(
+            {int(k.split()[1]): v for k, v in sorted_depths}
+        )
 
     # Truncate the chains to the top N
     if isinstance(stats["instantiation_chains"], defaultdict):
@@ -182,21 +206,57 @@ def main(args: argparse.Namespace) -> None:
 
     # Print a structured table
     lines: list[str] = []
-    lines.append("Z3 Trace Analysis:")
-    lines.append("-" * 40)
-    lines.append("       Count  Command types")
-    for cmd, count in stats["commands"].most_common(args.top_n):
-        lines.append(f"{count:12,}  {cmd}")
-    lines.append("-" * 40)
-    lines.append("       Count  Quantifier pattern matches")
-    for name, count in stats["new_match"].most_common(args.top_n):
-        lines.append(f"{count:12,}  {name}")
-    lines.append("-" * 40)
-    lines.append("       Count  Proof step types")
-    for proof_type, count in stats["proof_steps"].most_common(args.top_n):
-        lines.append(f"{count:12,}  {proof_type}")
-    lines.append("-" * 40)
+
+    # Format functions for consistent output
+    def format_section(title: str) -> None:
+        lines.append("")
+        lines.append(f"=== {title} ===")
+
+    def format_counter(counter: Counter[str], title: str) -> None:
+        lines.append(f"       Count  {title}")
+        for name, count in counter.most_common(args.top_n):
+            if name == "(total)":
+                continue
+            lines.append(f"{count:12,}  {name}")
+        total = counter.get("(total)", 0)
+        if total > 0:
+            lines.append(f"{'':12}  -----")
+            lines.append(f"{total:12,}  (total)")
+
+    # Add title
+    lines.append("Z3 Trace Analysis")
+
+    # Command statistics
+    format_section("Command Statistics")
+    format_counter(stats["commands"], "Command")
+
+    # Pattern matching statistics
+    format_section("Pattern Matching Statistics")
+    format_counter(stats["new_match"], "Quantifier pattern")
+
+    # Instantiation statistics
+    format_section("Instantiation Statistics")
     lines.append(f"Total instance count: {stats['instance_count']:,}")
+    mean = stats["instance_count"] / sum(stats["new_match"].values())
+    lines.append(f"Average instances per match: {mean:.2f}")
+
+    percentage: float
+    if stats["instantiation_depth"]:
+        lines.append("")
+        lines.append("Instantiation depth distribution:")
+        for depth, percentage in stats["instantiation_depth"].items():
+            lines.append(f"  {depth}: {percentage:.1f}%")
+
+    lines.append("")
+    lines.append("Instantiation source:")
+    for source, count in stats["instance_source"].most_common(args.top_n):
+        percentage = (count / stats["instance_count"]) * 100
+        lines.append(f"  {source}: {count:,} ({percentage:.1f}%)")
+
+    # Proof step statistics
+    format_section("Proof Statistics")
+    format_counter(stats["proof_steps"], "Proof step types")
+
     logger.info("\n".join(lines))
 
 
