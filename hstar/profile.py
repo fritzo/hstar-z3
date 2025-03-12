@@ -21,14 +21,14 @@ DEFAULT_TRACE = os.path.join(TMP, "z3_trace.log")
 
 class TraceStats(TypedDict):
     commands: Counter[str]
-    quantifiers: Counter[str]
+    new_match: Counter[str]
 
 
 def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
     """Process the Z3 trace file and extract statistics."""
     stats: TraceStats = {
         "commands": Counter(),
-        "quantifiers": Counter(),
+        "new_match": Counter(),
     }
     id_to_name: dict[str, str] = {}
 
@@ -51,19 +51,21 @@ def process_trace(filename: str = DEFAULT_TRACE) -> TraceStats:
             # Process different command types
             if cmd == "mk-quant":
                 # Format: [mk-quant] #ID name num_vars pattern formula
+                # Note one named ForAll may have multiple ids.
                 parts = args.strip().split()
                 if len(parts) >= 3:
                     quant_id = parts[0]
                     quant_name = parts[1]
                     id_to_name[quant_id] = quant_name
-
-            elif cmd == "instance":
-                # Format: [instance] ID formula
+                    
+            elif cmd == "new-match":
+                # Format: [new-match] hash_id quant_id pattern_vars ; result_terms
                 parts = args.strip().split()
-                if len(parts) >= 1:
-                    instance_id = parts[0]
-                    name = id_to_name.get(instance_id, instance_id)
-                    stats["quantifiers"][name] += 1
+                if len(parts) >= 2:
+                    # The second element is typically the quantifier ID
+                    match_quant_id = parts[1]
+                    name = id_to_name.get(match_quant_id, match_quant_id)
+                    stats["new_match"][name] += 1
 
             # Add a basic progress indicator for large files
             if i % 1000000 == 0 and i > 0:
@@ -83,7 +85,7 @@ def truncate_stats(stats: TraceStats, top_n: int = 10) -> None:
         stats.update(dict(most_common))
 
     truncate(stats["commands"])
-    truncate(stats["quantifiers"])
+    truncate(stats["new_match"])
 
 
 def main(args: argparse.Namespace) -> None:
