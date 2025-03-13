@@ -112,7 +112,14 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
     "--subprocess",
     action="store_true",
+    default=True,
     help="Run Z3 in a subprocess",
+)
+parser.add_argument(
+    "--no-subprocess",
+    action="store_false",
+    dest="subprocess",
+    help="Run Z3 in the current process",
 )
 parser.add_argument(
     "--timeout-ms", type=int, default=5000, help="Solver timeout in milliseconds"
@@ -120,7 +127,14 @@ parser.add_argument(
 parser.add_argument(
     "--trace",
     action="store_true",
+    default=True,
     help="Enable Z3 tracing",
+)
+parser.add_argument(
+    "--no-trace",
+    action="store_false",
+    dest="trace",
+    help="Disable Z3 tracing",
 )
 parser.add_argument(
     "--trace-file",
