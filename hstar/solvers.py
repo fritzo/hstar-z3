@@ -352,7 +352,6 @@ def order_theory(s: z3.Solver) -> None:
         ForAll(
             [x, y, z],
             Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z))),
-            patterns=[MultiPattern(LEQ(x, y), LEQ(y, z))],
             qid="leq_trans",
         ),
         Not(LEQ(TOP, BOT)),
