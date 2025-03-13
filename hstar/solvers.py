@@ -506,12 +506,14 @@ def has_inhabs(t: z3.ExprRef, *inhabs: z3.ExprRef, qid: str) -> z3.ExprRef:
     return ForAll([x], Or(*[EQ(APP(t, x), i) for i in inhabs]), qid=f"inhab_{qid}")
 
 
-def type_theory(s: z3.Solver, *, include_hangs: bool = False) -> None:
+def type_theory(s: z3.Solver) -> None:
     """Theory of types and type membership."""
     s.add(
         # # Types are closures.
         ForAll([t], LEQ(I, APP(V, t)), qid="v_id"),
         ForAll([t], EQ(COMP(APP(V, t), APP(V, t)), APP(V, t)), qid="v_comp"),
+        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
+        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
         # TYPE is a type.
         LEQ(I, V),
         EQ(COMP(V, V), V),
@@ -519,13 +521,6 @@ def type_theory(s: z3.Solver, *, include_hangs: bool = False) -> None:
         # # Inhabitants are fixed points.
         OFTYPE(V, V),
         ForAll([t], OFTYPE(APP(V, t), V), qid="type_of_type"),
-    )
-    if not include_hangs:
-        return
-    # FIXME these rules are disabled because they cause hangs.
-    s.add(
-        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
-        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
         ForAll([t], EQ(APP(V, t), JOIN(I, COMP(t, APP(V, t)))), qid="v_join_left"),
         ForAll([t], EQ(APP(V, t), JOIN(I, COMP(APP(V, t), t))), qid="v_join_right"),
         has_inhabs(DIV, TOP, BOT, qid="div"),
