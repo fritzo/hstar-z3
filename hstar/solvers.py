@@ -46,7 +46,6 @@ SUBST = z3.Function("SUBST", z3.IntSort(), Term, Term, Term)
 
 # Scott ordering.
 LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())  # x [= y
-EQ = z3.Function("EQ", Term, Term, z3.BoolSort())  # x == y
 
 # Constants.
 f, g, h = z3.Consts("f g h", Term)
@@ -68,6 +67,11 @@ Y_ = ABS(APP(ABS(APP(v0, v0)), ABS(APP(v1, APP(v0, v0)))))
 DIV = z3.Const("DIV", Term)
 TYPE = z3.Const("TYPE", Term)
 SIMPLE = z3.Const("SIMPLE", Term)
+
+
+def EQ(lhs: z3.ExprRef, rhs: z3.ExprRef) -> z3.ExprRef:
+    """Check if two terms are equal."""
+    return And(LEQ(lhs, rhs), LEQ(rhs, lhs))
 
 
 def CONV(term: z3.ExprRef) -> z3.ExprRef:
@@ -343,8 +347,6 @@ def de_bruijn_theory(s: z3.Solver) -> None:
 # Theory of Scott ordering.
 def order_theory(s: z3.Solver) -> None:
     s.add(
-        # EQ is LEQ in both directions
-        ForAll([x, y], EQ(x, y) == And(LEQ(x, y), LEQ(y, x)), qid="eq_def"),
         # Basic order axioms
         ForAll([x], LEQ(x, TOP), qid="leq_top"),
         ForAll([x], LEQ(BOT, x), qid="leq_bot"),
@@ -365,14 +367,14 @@ def order_theory(s: z3.Solver) -> None:
             qid="join_lub",
         ),  # Least upper bound property
         # JOIN is associative, commutative, and idempotent
-        ForAll([x, y], EQ(JOIN(x, y), JOIN(y, x)), qid="join_commute"),
+        ForAll([x, y], LEQ(JOIN(x, y), JOIN(y, x)), qid="join_commute"),
         ForAll(
             [x, y, z], EQ(JOIN(x, JOIN(y, z)), JOIN(JOIN(x, y), z)), qid="join_assoc"
         ),
-        ForAll([x], EQ(JOIN(x, x), x), qid="join_idem"),
+        ForAll([x], LEQ(JOIN(x, x), x), qid="join_idem"),
         # JOIN with BOT/TOP
-        ForAll([x], EQ(JOIN(x, BOT), x), qid="join_bot"),  # BOT is identity
-        ForAll([x], EQ(JOIN(x, TOP), TOP), qid="join_top"),  # TOP absorbs
+        ForAll([x], LEQ(JOIN(x, BOT), x), qid="join_bot"),  # BOT is identity
+        ForAll([x], LEQ(JOIN(x, TOP), TOP), qid="join_top"),  # TOP absorbs
     )
 
 
@@ -421,7 +423,7 @@ def lambda_theory(s: z3.Solver) -> None:
         ForAll(
             [y],
             Implies(EQ(app(S, I, y), y), EQ(y, Y)),
-            patterns=[EQ(app(S, I, y), y)],
+            patterns=[MultiPattern(LEQ(app(S, I, y), y), LEQ(y, app(S, I, y)))],
             qid="siy",
         ),
         ForAll(
@@ -475,11 +477,6 @@ def lambda_theory(s: z3.Solver) -> None:
             [f, g],
             Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g)),
             qid="ext_leq",
-        ),
-        ForAll(
-            [f, g],
-            Implies(ForAll([x], EQ(APP(f, x), APP(g, x))), EQ(f, g)),
-            qid="ext_eq",
         ),
         # Eta conversion
         ForAll([f], EQ(ABS(APP(shift(f), VAR(0))), f), qid="eta_conv"),
