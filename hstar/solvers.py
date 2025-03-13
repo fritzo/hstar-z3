@@ -57,10 +57,14 @@ v1 = VAR(1)
 v2 = VAR(2)
 I = ABS(v0)
 K = ABS(ABS(VAR(1)))
+KI = ABS(ABS(VAR(0)))
 B = ABS(ABS(ABS(APP(v2, APP(v1, v0)))))
+CB = ABS(ABS(ABS(APP(v2, APP(v0, v1)))))
 C = ABS(ABS(ABS(APP(APP(v2, v0), v1))))
+W = ABS(ABS(APP(APP(v1, v0), v0)))
 S = ABS(ABS(ABS(APP(APP(v2, v0), APP(v1, v0)))))
 Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
+Y_ = ABS(APP(ABS(APP(v0, v0)), ABS(APP(v1, APP(v0, v0)))))
 DIV = z3.Const("DIV", Term)
 TYPE = z3.Const("TYPE", Term)
 SIMPLE = z3.Const("SIMPLE", Term)
@@ -399,13 +403,34 @@ def lambda_theory(s: z3.Solver) -> None:
             Implies(LEQ(g, h), LEQ(COMP(f, g), COMP(f, h))),
             qid="comp_mono_right",
         ),
-        # Basic combinators
+        # Combinator equations
+        EQ(KI, APP(K, I)),
+        EQ(CB, APP(C, B)),
+        EQ(Y, Y_),
+        # Beta reduction of combinators
         ForAll([x], EQ(APP(I, x), x), qid="beta_i"),
         ForAll([x, y], EQ(app(K, x, y), x), qid="beta_k"),
+        ForAll([x, y], EQ(app(KI, x, y), y), qid="beta_ki"),
         ForAll([x, y, z], EQ(app(B, x, y, z), app(x, app(y, z))), qid="beta_b"),
+        ForAll([x, y, z], EQ(app(CB, x, y, z), app(x, app(z, y))), qid="beta_b"),
         ForAll([x, y, z], EQ(app(C, x, y, z), app(x, z, y)), qid="beta_c"),
+        ForAll([x, y, z], EQ(app(W, x, y), app(x, y, y)), qid="beta_s"),
         ForAll([x, y, z], EQ(app(S, x, y, z), app(x, z, app(y, z))), qid="beta_s"),
         ForAll([f], EQ(APP(Y, f), APP(f, APP(Y, f))), qid="beta_y"),
+        # Fixed point equations
+        EQ(app(S, I, Y), Y),
+        ForAll(
+            [y],
+            Implies(EQ(app(S, I, y), y), EQ(y, Y)),
+            patterns=[EQ(app(S, I, y), y)],
+            qid="siy",
+        ),
+        ForAll(
+            [f, x],
+            Implies(LEQ(APP(f, x), x), LEQ(APP(Y, f), x)),
+            patterns=[MultiPattern(LEQ(APP(f, x), x), APP(Y, f))],
+            qid="y_fix",
+        ),
         # Beta reduction using Z3's SUBST
         ForAll([x, y], EQ(APP(ABS(x), y), SUBST(0, y, x)), qid="beta_app_abs"),
         # APP-JOIN distributivity (both directions)
