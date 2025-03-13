@@ -20,7 +20,6 @@ from hstar.solvers import (
     SIMPLE,
     TOP,
     TUPLE,
-    TYPE,
     VAR,
     B,
     C,
@@ -28,6 +27,7 @@ from hstar.solvers import (
     K,
     S,
     Term,
+    V,
     Y,
     add_theory,
     bool_,
@@ -370,40 +370,40 @@ def test_simple(solver: z3.Solver, formula: z3.ExprRef) -> None:
 
 TYPE_EXAMPLES = {
     # Any.
-    "ANY : TYPE": OFTYPE(ANY, TYPE),
+    "ANY : TYPE": OFTYPE(ANY, V),
     "x : ANY": OFTYPE(x, ANY),
     # Div.
-    "div : TYPE": OFTYPE(DIV, TYPE),
+    "div : TYPE": OFTYPE(DIV, V),
     "TOP : div": OFTYPE(TOP, DIV),
     "BOT : div": OFTYPE(BOT, DIV),
     # Semi.
-    "semi : TYPE": OFTYPE(semi, TYPE),
+    "semi : TYPE": OFTYPE(semi, V),
     "TOP : semi": OFTYPE(TOP, semi),
     "BOT : semi": OFTYPE(BOT, semi),
     "I : semi": OFTYPE(I, semi),
     # Boool.
-    "boool : TYPE": OFTYPE(boool, TYPE),
+    "boool : TYPE": OFTYPE(boool, V),
     "TOP : boool": OFTYPE(TOP, boool),
     "BOT : boool": OFTYPE(BOT, boool),
     "true : boool": OFTYPE(true_, boool),
     "false : boool": OFTYPE(false_, boool),
     "JOIN(true, false) : boool": OFTYPE(JOIN(true_, false_), boool),
     # Pre Pair.
-    "pre_pair : TYPE": OFTYPE(pre_pair, TYPE),
+    "pre_pair : TYPE": OFTYPE(pre_pair, V),
     "<x,y> : pre_pair": OFTYPE(TUPLE(x, y), pre_pair),
     "x,y:pair ==> x|y:pair": Implies(
         OFTYPE(TUPLE(x, y), pair), OFTYPE(JOIN(x, y), pair)
     ),
     # Unit.
-    "unit : TYPE": OFTYPE(unit, TYPE),
+    "unit : TYPE": OFTYPE(unit, V),
     "TOP : unit": OFTYPE(TOP, unit),
     "I : unit": OFTYPE(I, unit),
     # Bool.
-    "bool : TYPE": OFTYPE(bool_, TYPE),
+    "bool : TYPE": OFTYPE(bool_, V),
     "true : bool": OFTYPE(true_, bool_),
     "false : bool": OFTYPE(false_, bool_),
     # Pair.
-    "pair : TYPE": OFTYPE(pair, TYPE),
+    "pair : TYPE": OFTYPE(pair, V),
     "<x,y> : pair": OFTYPE(TUPLE(x, y), pair),
 }
 

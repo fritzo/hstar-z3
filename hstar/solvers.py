@@ -64,18 +64,18 @@ W = ABS(ABS(APP(APP(v1, v0), v0)))
 S = ABS(ABS(ABS(APP(APP(v2, v0), APP(v1, v0)))))
 Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
 Y_ = ABS(APP(ABS(APP(v0, v0)), ABS(APP(v1, APP(v0, v0)))))
-DIV = z3.Const("DIV", Term)
-TYPE = z3.Const("TYPE", Term)
-SIMPLE = z3.Const("SIMPLE", Term)
+V = ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))
+DIV = APP(V, ABS(APP(v0, TOP)))
+SIMPLE = z3.Const("SIMPLE", Term)  # TODO define
 
 
 def EQ(lhs: z3.ExprRef, rhs: z3.ExprRef) -> z3.ExprRef:
-    """Check if two terms are equal."""
+    """Check whether two terms are observationally equivalent."""
     return And(LEQ(lhs, rhs), LEQ(rhs, lhs))
 
 
 def CONV(term: z3.ExprRef) -> z3.ExprRef:
-    """Check if a term converges (is not bottom)."""
+    """Check whether a term converges (is not bottom)."""
     return Not(LEQ(term, BOT))
 
 
@@ -199,13 +199,13 @@ ANY = I
 semi = simple(lambda a, a1: CONJ(a, a1))
 boool = simple(lambda a, a1: CONJ(a, CONJ(a, a1)))
 pre_pair = simple(lambda a, a1: CONJ(CONJ(ANY, a), CONJ(CONJ(ANY, a), a1)))
-unit = APP(TYPE, JOIN(semi, ABS(I)))
+unit = APP(V, JOIN(semi, ABS(I)))
 disamb_bool = hoas(lambda f, x, y: app(f, app(f, x, TOP), app(f, TOP, y)))
-bool_ = APP(TYPE, JOIN(boool, disamb_bool))
+bool_ = APP(V, JOIN(boool, disamb_bool))
 true_ = hoas(lambda x, y: x)
 false_ = hoas(lambda x, y: y)
 disamb_pair = hoas(lambda p, f: app(f, app(p, true_), app(p, false_)))
-pair = APP(TYPE, JOIN(pre_pair, disamb_pair))
+pair = APP(V, JOIN(pre_pair, disamb_pair))
 
 
 def OFTYPE(x: z3.ExprRef, t: z3.ExprRef) -> z3.ExprRef:
@@ -510,32 +510,24 @@ def type_theory(s: z3.Solver, *, include_hangs: bool = False) -> None:
     """Theory of types and type membership."""
     s.add(
         # # Types are closures.
-        ForAll([t], LEQ(I, APP(TYPE, t)), qid="type_closure_id"),
-        ForAll(
-            [t],
-            EQ(COMP(APP(TYPE, t), APP(TYPE, t)), APP(TYPE, t)),
-            qid="type_closure_comp",
-        ),
+        ForAll([t], LEQ(I, APP(V, t)), qid="v_id"),
+        ForAll([t], EQ(COMP(APP(V, t), APP(V, t)), APP(V, t)), qid="v_comp"),
         # TYPE is a type.
-        LEQ(I, TYPE),
-        EQ(COMP(TYPE, TYPE), TYPE),
-        ForAll([t], EQ(APP(TYPE, APP(TYPE, t)), APP(TYPE, t)), qid="type_idem"),
+        LEQ(I, V),
+        EQ(COMP(V, V), V),
+        ForAll([t], EQ(APP(V, APP(V, t)), APP(V, t)), qid="v_idem"),
         # # Inhabitants are fixed points.
-        OFTYPE(TYPE, TYPE),
-        ForAll([t], OFTYPE(APP(TYPE, t), TYPE), qid="type_of_type"),
+        OFTYPE(V, V),
+        ForAll([t], OFTYPE(APP(V, t), V), qid="type_of_type"),
     )
     if not include_hangs:
         return
     # FIXME these rules are disabled because they cause hangs.
     s.add(
-        EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
-        EQ(TYPE, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
-        ForAll(
-            [t], EQ(APP(TYPE, t), JOIN(I, COMP(t, APP(TYPE, t)))), qid="type_join_left"
-        ),
-        ForAll(
-            [t], EQ(APP(TYPE, t), JOIN(I, COMP(APP(TYPE, t), t))), qid="type_join_right"
-        ),
+        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
+        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
+        ForAll([t], EQ(APP(V, t), JOIN(I, COMP(t, APP(V, t)))), qid="v_join_left"),
+        ForAll([t], EQ(APP(V, t), JOIN(I, COMP(APP(V, t), t))), qid="v_join_right"),
         has_inhabs(DIV, TOP, BOT, qid="div"),
         has_inhabs(semi, TOP, BOT, I, qid="semi"),
         has_inhabs(unit, TOP, I, qid="unit"),
