@@ -47,7 +47,6 @@ SUBST = z3.Function("SUBST", z3.IntSort(), Term, Term, Term)
 # Scott ordering.
 LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())  # x [= y
 EQ = z3.Function("EQ", Term, Term, z3.BoolSort())  # x == y
-CONV = z3.Function("CONV", Term, z3.BoolSort())  # x converges
 
 # Constants.
 f, g, h = z3.Consts("f g h", Term)
@@ -65,6 +64,11 @@ Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
 DIV = z3.Const("DIV", Term)
 TYPE = z3.Const("TYPE", Term)
 SIMPLE = z3.Const("SIMPLE", Term)
+
+
+def CONV(term: z3.ExprRef) -> z3.ExprRef:
+    """Check if a term converges (is not bottom)."""
+    return Not(LEQ(term, BOT))
 
 
 def shift(term: z3.ExprRef, start: int = 0) -> z3.ExprRef:
@@ -458,46 +462,6 @@ def lambda_theory(s: z3.Solver) -> None:
     )
 
 
-def convergence_theory(s: z3.Solver) -> None:
-    i = z3.Int("i")
-    s.add(
-        # DIV tests for convergence
-        EQ(DIV, APP(Y, TUPLE(TOP))),
-        ForAll([x], EQ(APP(DIV, x), APP(DIV, APP(x, TOP))), qid="div_unfold"),
-        LEQ(APP(DIV, BOT), BOT),
-        # CONV is a least fixed point
-        CONV(TOP),
-        ForAll(
-            [x, y],
-            Implies(CONV(APP(x, y)), CONV(x)),
-            patterns=[CONV(APP(x, y))],  # prevents hang
-            qid="conv_app",
-        ),
-        ForAll(
-            [x, y],
-            Implies(CONV(COMP(x, y)), CONV(x)),
-            patterns=[CONV(COMP(x, y))],  # prevents hang
-            qid="conv_comp",
-        ),
-        Not(CONV(BOT)),
-        ForAll([x], Implies(Not(CONV(x)), LEQ(x, BOT)), qid="nonconv_bot"),
-        ForAll(
-            [x, y],
-            Implies(LEQ(x, y), Implies(CONV(x), CONV(y))),
-            patterns=[MultiPattern(LEQ(x, y), CONV(x))],
-            qid="conv_mono",
-        ),
-        # Base cases
-        ForAll([i], CONV(VAR(i)), qid="conv_var"),
-        # DIV's relation to CONV
-        ForAll([x], Implies(CONV(x), LEQ(TOP, APP(DIV, x))), qid="conv_div_top"),
-        ForAll([x], Implies(LEQ(TOP, APP(DIV, x)), CONV(x)), qid="div_top_conv"),
-        # Multi-argument functions
-        ForAll([x], Implies(CONV(x), CONV(ABS(x))), qid="conv_abs"),
-        ForAll([x], Implies(CONV(x), CONV(APP(x, TOP))), qid="conv_app_top"),
-    )
-
-
 def simple_theory(s: z3.Solver) -> None:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
 
@@ -559,15 +523,13 @@ def type_theory(s: z3.Solver, *, include_hangs: bool = False) -> None:
     )
 
 
-def add_theory(s: z3.Solver, *, include_slow: bool = False) -> None:
+def add_theory(s: z3.Solver) -> None:
     counter["add_theory"] += 1
     de_bruijn_theory(s)
     order_theory(s)
     lambda_theory(s)
-    if include_slow:
-        convergence_theory(s)
-        simple_theory(s)
-        type_theory(s)
+    simple_theory(s)
+    type_theory(s)
 
 
 # https://microsoft.github.io/z3guide/programming/Parameters/#global-parameters
