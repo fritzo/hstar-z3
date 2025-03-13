@@ -559,14 +559,15 @@ def type_theory(s: z3.Solver, *, include_hangs: bool = False) -> None:
     )
 
 
-def add_theory(s: z3.Solver) -> None:
+def add_theory(s: z3.Solver, *, include_slow: bool = False) -> None:
     counter["add_theory"] += 1
     de_bruijn_theory(s)
     order_theory(s)
     lambda_theory(s)
-    convergence_theory(s)
-    simple_theory(s)
-    type_theory(s)
+    if include_slow:
+        convergence_theory(s)
+        simple_theory(s)
+        type_theory(s)
 
 
 # https://microsoft.github.io/z3guide/programming/Parameters/#global-parameters
