@@ -10,7 +10,7 @@ a types-as-closures.
 """
 
 import inspect
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 
 import z3
@@ -57,6 +57,7 @@ v2 = VAR(2)
 I = ABS(v0)
 K = ABS(ABS(VAR(1)))
 KI = ABS(ABS(VAR(0)))
+J = JOIN(K, KI)
 B = ABS(ABS(ABS(APP(v2, APP(v1, v0)))))
 CB = ABS(ABS(ABS(APP(v2, APP(v0, v1)))))
 C = ABS(ABS(ABS(APP(APP(v2, v0), v1))))
@@ -202,9 +203,7 @@ pre_pair = simple(lambda a, a1: CONJ(CONJ(ANY, a), CONJ(CONJ(ANY, a), a1)))
 unit = APP(V, JOIN(semi, ABS(I)))
 disamb_bool = hoas(lambda f, x, y: app(f, app(f, x, TOP), app(f, TOP, y)))
 bool_ = APP(V, JOIN(boool, disamb_bool))
-true_ = hoas(lambda x, y: x)
-false_ = hoas(lambda x, y: y)
-disamb_pair = hoas(lambda p, f: app(f, app(p, true_), app(p, false_)))
+disamb_pair = hoas(lambda p, f: app(f, app(p, K), app(p, KI)))
 pair = APP(V, JOIN(pre_pair, disamb_pair))
 
 
@@ -412,6 +411,7 @@ def lambda_theory(s: z3.Solver) -> None:
         ForAll([x], EQ(APP(I, x), x), qid="beta_i"),
         ForAll([x, y], EQ(app(K, x, y), x), qid="beta_k"),
         ForAll([x, y], EQ(app(KI, x, y), y), qid="beta_ki"),
+        ForAll([x, y], EQ(app(J, x, y), JOIN(x, y)), qid="beta_k"),
         ForAll([x, y, z], EQ(app(B, x, y, z), app(x, app(y, z))), qid="beta_b"),
         ForAll([x, y, z], EQ(app(CB, x, y, z), app(x, app(z, y))), qid="beta_b"),
         ForAll([x, y, z], EQ(app(C, x, y, z), app(x, z, y)), qid="beta_c"),
@@ -502,11 +502,7 @@ def simple_theory(s: z3.Solver) -> None:
     )
 
 
-def has_inhabs(t: z3.ExprRef, *inhabs: z3.ExprRef, qid: str) -> z3.ExprRef:
-    return ForAll([x], Or(*[EQ(APP(t, x), i) for i in inhabs]), qid=f"inhab_{qid}")
-
-
-def type_theory(s: z3.Solver) -> None:
+def closure_theory(s: z3.Solver) -> None:
     """Theory of types and type membership."""
     s.add(
         # # Types are closures.
@@ -518,26 +514,47 @@ def type_theory(s: z3.Solver) -> None:
         LEQ(I, V),
         EQ(COMP(V, V), V),
         ForAll([t], EQ(APP(V, APP(V, t)), APP(V, t)), qid="v_idem"),
-        # # Inhabitants are fixed points.
+        # Inhabitants are fixed points.
         OFTYPE(V, V),
         ForAll([t], OFTYPE(APP(V, t), V), qid="type_of_type"),
         ForAll([t], EQ(APP(V, t), JOIN(I, COMP(t, APP(V, t)))), qid="v_join_left"),
         ForAll([t], EQ(APP(V, t), JOIN(I, COMP(APP(V, t), t))), qid="v_join_right"),
-        has_inhabs(DIV, TOP, BOT, qid="div"),
-        has_inhabs(semi, TOP, BOT, I, qid="semi"),
-        has_inhabs(unit, TOP, I, qid="unit"),
-        has_inhabs(boool, TOP, true_, false_, JOIN(true_, false_), BOT, qid="bool"),
-        has_inhabs(bool_, TOP, true_, false_, BOT, qid="bool_"),
     )
 
 
-def add_theory(s: z3.Solver) -> None:
+def declare_type(
+    t: z3.ExprRef,
+    inhabs: list[z3.ExprRef],
+    qid: str,
+) -> Iterator[z3.ExprRef]:
+    # t is a type
+    yield OFTYPE(t, V)
+    # t contains all its inhabitants
+    for x in inhabs:
+        yield OFTYPE(x, t)
+    # t contains only its inhabitants
+    yield ForAll([x], Or(*[EQ(APP(t, x), i) for i in inhabs]), qid=f"inhab_{qid}")
+
+
+def types_theory(s: z3.Solver) -> None:
+    s.add(
+        *declare_type(DIV, [TOP, BOT], qid="div"),
+        *declare_type(semi, [TOP, BOT, I], qid="semi"),
+        *declare_type(unit, [TOP, I], qid="unit"),
+        *declare_type(boool, [TOP, K, KI, J, BOT], qid="boool"),
+        *declare_type(bool_, [TOP, K, KI, BOT], qid="bool"),
+    )
+
+
+def add_theory(s: z3.Solver, types: bool = False) -> None:
     counter["add_theory"] += 1
     de_bruijn_theory(s)
     order_theory(s)
     lambda_theory(s)
     simple_theory(s)
-    type_theory(s)
+    closure_theory(s)
+    if types:
+        types_theory(s)
 
 
 # https://microsoft.github.io/z3guide/programming/Parameters/#global-parameters

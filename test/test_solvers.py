@@ -15,6 +15,7 @@ from hstar.solvers import (
     DIV,
     EQ,
     JOIN,
+    KI,
     LEQ,
     OFTYPE,
     SIMPLE,
@@ -32,7 +33,6 @@ from hstar.solvers import (
     add_theory,
     bool_,
     boool,
-    false_,
     hoas,
     pair,
     pre_pair,
@@ -40,7 +40,6 @@ from hstar.solvers import (
     shift,
     solver_timeout,
     subst,
-    true_,
     unit,
 )
 
@@ -385,9 +384,9 @@ TYPE_EXAMPLES = {
     "boool : TYPE": OFTYPE(boool, V),
     "TOP : boool": OFTYPE(TOP, boool),
     "BOT : boool": OFTYPE(BOT, boool),
-    "true : boool": OFTYPE(true_, boool),
-    "false : boool": OFTYPE(false_, boool),
-    "JOIN(true, false) : boool": OFTYPE(JOIN(true_, false_), boool),
+    "true : boool": OFTYPE(K, boool),
+    "false : boool": OFTYPE(KI, boool),
+    "JOIN(true, false) : boool": OFTYPE(JOIN(K, KI), boool),
     # Pre Pair.
     "pre_pair : TYPE": OFTYPE(pre_pair, V),
     "<x,y> : pre_pair": OFTYPE(TUPLE(x, y), pre_pair),
@@ -400,8 +399,8 @@ TYPE_EXAMPLES = {
     "I : unit": OFTYPE(I, unit),
     # Bool.
     "bool : TYPE": OFTYPE(bool_, V),
-    "true : bool": OFTYPE(true_, bool_),
-    "false : bool": OFTYPE(false_, bool_),
+    "true : bool": OFTYPE(K, bool_),
+    "false : bool": OFTYPE(KI, bool_),
     # Pair.
     "pair : TYPE": OFTYPE(pair, V),
     "<x,y> : pair": OFTYPE(TUPLE(x, y), pair),
