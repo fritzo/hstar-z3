@@ -196,13 +196,25 @@ def truncate_stats(stats: TraceStats, top_n: int = 10) -> None:
         stats["instantiation_chains"] = dict(sorted_chains)
 
 
-def main(args: argparse.Namespace) -> None:
+def summarize(infile: str, *, outfile: str | None = None, top_n: int = 10) -> None:
+    """
+    Process a Z3 trace file and generate a summary of statistics.
+
+    Args:
+        infile: Path to the Z3 trace file to analyze
+        outfile: Optional path to write the analysis summary
+        top_n: Number of top items to show in each category
+    """
     from .logging import setup_color_logging
 
+    if outfile is None:
+        assert infile.endswith(".log"), infile
+        outfile = infile[:-4] + ".txt"
+
     setup_color_logging()
-    logger.info(f"Processing trace file: {args.file}")
-    stats = process_trace(args.file)
-    truncate_stats(stats, args.top_n)
+    logger.info(f"Processing trace file: {infile}")
+    stats = process_trace(infile)
+    truncate_stats(stats, top_n)
 
     # Print a structured table
     lines: list[str] = []
@@ -214,7 +226,7 @@ def main(args: argparse.Namespace) -> None:
 
     def format_counter(counter: Counter[str], title: str) -> None:
         lines.append(f"       Count  {title}")
-        for name, count in counter.most_common(args.top_n):
+        for name, count in counter.most_common(top_n):
             if name == "(total)":
                 continue
             lines.append(f"{count:12,}  {name}")
@@ -249,7 +261,7 @@ def main(args: argparse.Namespace) -> None:
 
     lines.append("")
     lines.append("Instantiation source:")
-    for source, count in stats["instance_source"].most_common(args.top_n):
+    for source, count in stats["instance_source"].most_common(top_n):
         percentage = (count / stats["instance_count"]) * 100
         lines.append(f"  {source}: {count:,} ({percentage:.1f}%)")
 
@@ -257,13 +269,26 @@ def main(args: argparse.Namespace) -> None:
     format_section("Proof Statistics")
     format_counter(stats["proof_steps"], "Proof step types")
 
-    logger.info("\n".join(lines))
+    summary = "\n".join(lines)
+    logger.info(summary)
+    with open(outfile, "w") as f:
+        f.write(summary)
+
+
+def main(args: argparse.Namespace) -> None:
+    """Process command line arguments and run the analysis."""
+    summarize(args.infile, outfile=args.outfile, top_n=args.top_n)
 
 
 parser = argparse.ArgumentParser(
     description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
 )
-parser.add_argument("-f", "--file", default=DEFAULT_TRACE, help="Path to Z3 trace file")
+parser.add_argument(
+    "-i", "--infile", default=DEFAULT_TRACE, help="Path to Z3 trace file"
+)
+parser.add_argument(
+    "-o", "--outfile", default=None, help="Path to output file for analysis (optional)"
+)
 parser.add_argument(
     "-n",
     "--top-n",
