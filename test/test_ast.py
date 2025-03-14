@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from hstar.ast import ABS, APP, BOT, COMP, JOIN, TOP, VAR, Term, py_to_ast
+from hstar.ast import ABS, APP, BOT, COMP, JOIN, TOP, VAR, Term, to_ast
 
 EXAMPLES: list[tuple[Any, Term]] = [
     (lambda x: x, ABS(VAR(0))),
@@ -85,5 +85,5 @@ EXAMPLES: list[tuple[Any, Term]] = [
 @pytest.mark.parametrize(
     "pythonic, expected", EXAMPLES, ids=[str(e) for _, e in EXAMPLES]
 )
-def test_py_to_ast(pythonic: Any, expected: Term) -> None:
-    assert py_to_ast(pythonic) == expected
+def test_to_ast(pythonic: Any, expected: Term) -> None:
+    assert to_ast(pythonic) == expected

@@ -92,29 +92,29 @@ def VAR(varname: int) -> Term:
 
 def ABS(body: Any) -> Term:
     """Create an abstraction term."""
-    return Term(type=TermType.ABS, body=py_to_ast(body))
+    return Term(type=TermType.ABS, body=to_ast(body))
 
 
 def APP(lhs: Any, rhs: Any) -> Term:
     """Create an application term."""
-    return Term(type=TermType.APP, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
+    return Term(type=TermType.APP, lhs=to_ast(lhs), rhs=to_ast(rhs))
 
 
 def JOIN(lhs: Any, rhs: Any) -> Term:
     """Create a join term."""
-    return Term(type=TermType.JOIN, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
+    return Term(type=TermType.JOIN, lhs=to_ast(lhs), rhs=to_ast(rhs))
 
 
 def COMP(lhs: Any, rhs: Any) -> Term:
     """Create a composition term (f ∘ g)."""
-    return Term(type=TermType.COMP, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
+    return Term(type=TermType.COMP, lhs=to_ast(lhs), rhs=to_ast(rhs))
 
 
 def CONJ(lhs: Any, rhs: Any) -> Term:
     """Create a conjunction term \f. rhs o f o lhs."""
-    a = py_to_ast(lhs)
-    b = py_to_ast(rhs)
-    return py_to_ast(lambda f, x: b(f(a(x))))
+    a = to_ast(lhs)
+    b = to_ast(rhs)
+    return to_ast(lambda f, x: b(f(a(x))))
 
 
 def _FRESH() -> Term:
@@ -211,7 +211,7 @@ def _fresh_to_var(term: Term, fresh_varname: int, depth: int = 0) -> Term:
     raise TypeError(f"Unknown term type: {term.type}")
 
 
-def py_to_ast(pythonic: Any) -> Term:
+def to_ast(pythonic: Any) -> Term:
     """Convert a Python object to a Term in our AST using HOAS approach.
 
     Handles:
@@ -228,7 +228,7 @@ def py_to_ast(pythonic: Any) -> Term:
         sig = inspect.signature(pythonic)
         num_args = len(sig.parameters)
         fresh_vars = [_FRESH() for _ in range(num_args)]
-        result = py_to_ast(pythonic(*fresh_vars))
+        result = to_ast(pythonic(*fresh_vars))
         # Create lambda abstractions for each argument, from right to left
         for fresh in reversed(fresh_vars):
             assert fresh.varname is not None

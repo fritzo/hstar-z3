@@ -11,7 +11,7 @@ import argparse
 import z3
 
 from hstar import ast, normal
-from hstar.ast import APP, VAR, py_to_ast
+from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
 from hstar.solvers import EQ, SIMPLE
 from hstar.synthesis import Synthesizer
@@ -19,18 +19,23 @@ from hstar.synthesis import Synthesizer
 
 def main(args: argparse.Namespace) -> None:
     def tup(*args: ast.Term) -> ast.Term:
-        return py_to_ast(lambda f: f(*args))
+        return to_ast(lambda f: f(*args))
 
-    I = py_to_ast(lambda x: x)
-    Y = py_to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
+    I = to_ast(lambda x: x)
+    Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
+    DIV = Y(lambda div, x: x | div(x(TOP)))
+    raise_ = to_ast(lambda x, _: x)
+    lower = to_ast(lambda x: x(TOP))
+    pull = to_ast(lambda x, y: x | DIV(y))
+    push = to_ast(lambda x: x(BOT))
 
     # Create a sketch for SIMPLE
     sketch = Y(
         lambda s: (
             VAR(0)
             | tup(I, I)
-            # TODO add <raise, lower>
-            # TODO add <push, pull>
+            | tup(raise_, lower)
+            | tup(pull, push)
             | s(lambda a, a_: s(lambda b, b_: tup(a_ >> b, b_ >> a)))
         )
     )
@@ -47,7 +52,6 @@ def main(args: argparse.Namespace) -> None:
         if not valid or candidate.free_vars:
             continue
         print(f"Potential SIMPLE implementation: {candidate}")
-        # Additional validation could be performed here
 
 
 parser = argparse.ArgumentParser(
