@@ -52,6 +52,12 @@ class Term:
     def __rmul__(self, other: Any) -> "Term":
         return COMP(py_to_ast(other), self)
 
+    def __rshift__(self, other: Any) -> "Term":
+        return CONJ(self, py_to_ast(other))
+
+    def __rrshift__(self, other: Any) -> "Term":
+        return CONJ(py_to_ast(other), self)
+
     def __repr__(self) -> str:
         if self.type == TermType.TOP:
             return "TOP"
@@ -84,24 +90,31 @@ def VAR(varname: int) -> Term:
     return Term(type=TermType.VAR, varname=varname)
 
 
-def ABS(body: Term) -> Term:
+def ABS(body: Any) -> Term:
     """Create an abstraction term."""
-    return Term(type=TermType.ABS, body=body)
+    return Term(type=TermType.ABS, body=py_to_ast(body))
 
 
-def APP(lhs: Term, rhs: Term) -> Term:
+def APP(lhs: Any, rhs: Any) -> Term:
     """Create an application term."""
-    return Term(type=TermType.APP, lhs=lhs, rhs=rhs)
+    return Term(type=TermType.APP, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
 
 
-def JOIN(lhs: Term, rhs: Term) -> Term:
+def JOIN(lhs: Any, rhs: Any) -> Term:
     """Create a join term."""
-    return Term(type=TermType.JOIN, lhs=lhs, rhs=rhs)
+    return Term(type=TermType.JOIN, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
 
 
-def COMP(lhs: Term, rhs: Term) -> Term:
+def COMP(lhs: Any, rhs: Any) -> Term:
     """Create a composition term (f ∘ g)."""
-    return Term(type=TermType.COMP, lhs=lhs, rhs=rhs)
+    return Term(type=TermType.COMP, lhs=py_to_ast(lhs), rhs=py_to_ast(rhs))
+
+
+def CONJ(lhs: Any, rhs: Any) -> Term:
+    """Create a conjunction term \f. rhs o f o lhs."""
+    a = py_to_ast(lhs)
+    b = py_to_ast(rhs)
+    return py_to_ast(lambda f, x: b(f(a(x))))
 
 
 def _FRESH() -> Term:
