@@ -10,7 +10,7 @@ import argparse
 
 import z3
 
-from hstar import ast, normal
+from hstar import normal
 from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
 from hstar.solvers import EQ, SIMPLE
@@ -18,9 +18,6 @@ from hstar.synthesis import Synthesizer
 
 
 def main(args: argparse.Namespace) -> None:
-    def tup(*args: ast.Term) -> ast.Term:
-        return to_ast(lambda f: f(*args))
-
     I = to_ast(lambda x: x)
     Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
     DIV = Y(lambda div, x: x | div(x(TOP)))
@@ -31,12 +28,12 @@ def main(args: argparse.Namespace) -> None:
 
     # Create a sketch for SIMPLE
     sketch = Y(
-        lambda s: (
-            VAR(0)
-            | tup(I, I)
-            | tup(raise_, lower)
-            | tup(pull, push)
-            | s(lambda a, a_: s(lambda b, b_: tup(a_ >> b, b_ >> a)))
+        lambda s, f: (
+            VAR(0)(f)
+            | f(I, I)
+            | f(raise_, lower)
+            | f(pull, push)
+            | s(lambda a, a_: s(lambda b, b_: f(a_ >> b, b_ >> a)))
         )
     )
 
