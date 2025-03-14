@@ -275,7 +275,7 @@ def subst(i: int, replacement: z3.ExprRef, term: z3.ExprRef) -> z3.ExprRef:
     return SUBST(idx, replacement, term)
 
 
-def de_bruijn_theory(s: z3.Solver) -> None:
+def de_bruijn_theory(solver: z3.Solver) -> None:
     """Theory of de Bruijn operations SHIFT and SUBST."""
     i = z3.Int("i")
     j = z3.Int("j")
@@ -283,7 +283,7 @@ def de_bruijn_theory(s: z3.Solver) -> None:
     lhs = z3.Const("lhs", Term)
     rhs = z3.Const("rhs", Term)
     start = z3.Int("start")
-    s.add(
+    solver.add(
         # SHIFT axioms
         ForAll(
             [i, start],
@@ -344,8 +344,8 @@ def de_bruijn_theory(s: z3.Solver) -> None:
 
 
 # Theory of Scott ordering.
-def order_theory(s: z3.Solver) -> None:
-    s.add(
+def order_theory(solver: z3.Solver) -> None:
+    solver.add(
         # Basic order axioms
         ForAll([x], LEQ(x, TOP), qid="leq_top"),
         ForAll([x], LEQ(BOT, x), qid="leq_bot"),
@@ -378,8 +378,8 @@ def order_theory(s: z3.Solver) -> None:
 
 
 # Theory of lambda calculus.
-def lambda_theory(s: z3.Solver) -> None:
-    s.add(
+def lambda_theory(solver: z3.Solver) -> None:
+    solver.add(
         # Composition properties
         ForAll([f, g, x], EQ(APP(COMP(f, g), x), APP(f, APP(g, x))), qid="comp_def"),
         ForAll([f], EQ(COMP(f, I), f), qid="comp_id_right"),
@@ -483,7 +483,7 @@ def lambda_theory(s: z3.Solver) -> None:
     )
 
 
-def simple_theory(s: z3.Solver) -> None:
+def simple_theory(solver: z3.Solver) -> None:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
 
     def above_all_sr(candidate: z3.ExprRef) -> z3.ExprRef:
@@ -494,17 +494,31 @@ def simple_theory(s: z3.Solver) -> None:
             qid="sr_above",
         )
 
-    s.add(
+    solver.add(
         # SIMPLE is above all section-retract pairs.
         above_all_sr(SIMPLE),
         # SIMPLE is the least such term.
         ForAll([x], Implies(above_all_sr(x), LEQ(SIMPLE, x)), qid="simple_least"),
+        # inhabitation
+        ForAll(
+            [t, x],
+            Implies(
+                ForAll(
+                    [s, r],
+                    Implies(LEQ(COMP(r, s), I), LEQ(app(t, s, r, x), x)),
+                    qid="t_s_r_x",
+                ),
+                LEQ(app(SIMPLE, t, x), x),
+            ),
+            patterns=[LEQ(app(SIMPLE, t, x), x)],
+            qid="simple_inhab",
+        ),
     )
 
 
-def closure_theory(s: z3.Solver) -> None:
+def closure_theory(solver: z3.Solver) -> None:
     """Theory of types and type membership."""
-    s.add(
+    solver.add(
         # # Types are closures.
         ForAll([t], LEQ(I, APP(V, t)), qid="v_id"),
         ForAll([t], EQ(COMP(APP(V, t), APP(V, t)), APP(V, t)), qid="v_comp"),
@@ -523,9 +537,7 @@ def closure_theory(s: z3.Solver) -> None:
 
 
 def declare_type(
-    t: z3.ExprRef,
-    inhabs: list[z3.ExprRef],
-    qid: str,
+    t: z3.ExprRef, inhabs: list[z3.ExprRef], *, qid: str
 ) -> Iterator[z3.ExprRef]:
     # t is a type
     yield OFTYPE(t, V)
@@ -533,11 +545,12 @@ def declare_type(
     for x in inhabs:
         yield OFTYPE(x, t)
     # t contains only its inhabitants
+    # FIXME how does this interact with variables?
     yield ForAll([x], Or(*[EQ(APP(t, x), i) for i in inhabs]), qid=f"inhab_{qid}")
 
 
-def types_theory(s: z3.Solver) -> None:
-    s.add(
+def types_theory(solver: z3.Solver) -> None:
+    solver.add(
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
         *declare_type(unit, [TOP, I], qid="unit"),
@@ -546,15 +559,15 @@ def types_theory(s: z3.Solver) -> None:
     )
 
 
-def add_theory(s: z3.Solver, types: bool = False) -> None:
+def add_theory(solver: z3.Solver, types: bool = False) -> None:
     counter["add_theory"] += 1
-    de_bruijn_theory(s)
-    order_theory(s)
-    lambda_theory(s)
-    simple_theory(s)
-    closure_theory(s)
+    de_bruijn_theory(solver)
+    order_theory(solver)
+    lambda_theory(solver)
+    simple_theory(solver)
+    closure_theory(solver)
     if types:
-        types_theory(s)
+        types_theory(solver)
 
 
 # https://microsoft.github.io/z3guide/programming/Parameters/#global-parameters
