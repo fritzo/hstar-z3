@@ -7,7 +7,7 @@ normal.py (Python objects) and the Z3 terms in solvers.py (symbolic expressions)
 
 import z3
 
-from hstar import normal, solvers
+from hstar import ast, normal, solvers
 
 from .functools import weak_key_cache
 
@@ -145,3 +145,61 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
     except Exception as e:
         raise InvalidExpr(f"Error converting Z3 term: {e}") from e
     raise InvalidExpr(f"Unexpected Z3 term: {term}")
+
+
+def ast_to_nf(term: ast.Term) -> normal.Term:
+    """
+    Convert an ast.Term to a normal.Term.
+
+    Args:
+        term: An ast.Term instance
+
+    Returns:
+        A normal.Term instance
+    """
+    if term.type == ast.TermType.TOP:
+        return normal.TOP
+
+    elif term.type == ast.TermType.BOT:
+        return normal.BOT
+
+    elif term.type == ast.TermType.VAR:
+        assert term.varname is not None
+        return normal.VAR(term.varname)
+
+    elif term.type == ast.TermType.ABS:
+        assert term.body is not None
+        body = ast_to_nf(term.body)
+        return normal.ABS(body)
+
+    elif term.type == ast.TermType.APP:
+        assert term.lhs is not None
+        assert term.rhs is not None
+        lhs = ast_to_nf(term.lhs)
+        rhs = ast_to_nf(term.rhs)
+        return normal.APP(lhs, rhs)
+
+    elif term.type == ast.TermType.JOIN:
+        assert term.lhs is not None
+        assert term.rhs is not None
+        lhs = ast_to_nf(term.lhs)
+        rhs = ast_to_nf(term.rhs)
+        return normal.JOIN(lhs, rhs)
+
+    elif term.type == ast.TermType.COMP:
+        # Function composition (f ∘ g) is represented as λx. f(g(x))
+        assert term.lhs is not None
+        assert term.rhs is not None
+        f = normal.shift(ast_to_nf(term.lhs))
+        g = normal.shift(ast_to_nf(term.rhs))
+        x = normal.VAR(0)
+        return normal.ABS(normal.APP(f, normal.APP(g, x)))
+
+    elif term.type == ast.TermType._FRESH:
+        # _FRESH is a temporary term used during conversion from Python functions
+        # It shouldn't appear in final AST terms being converted to normal form
+        raise ValueError(
+            f"Cannot convert _FRESH term with ID {term.varname} to normal form"
+        )
+
+    raise ValueError(f"Unexpected term type: {term.type}")
