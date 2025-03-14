@@ -37,26 +37,26 @@ class Term:
     def __call__(self, *args: Any) -> "Term":
         result = self
         for arg in args:
-            result = APP(result, py_to_ast(arg))
+            result = APP(result, arg)
         return result
 
     def __or__(self, other: Any) -> "Term":
-        return JOIN(self, py_to_ast(other))
+        return JOIN(self, other)
 
     def __ror__(self, other: Any) -> "Term":
-        return JOIN(py_to_ast(other), self)
+        return JOIN(other, self)
 
     def __mul__(self, other: Any) -> "Term":
-        return COMP(self, py_to_ast(other))
+        return COMP(self, other)
 
     def __rmul__(self, other: Any) -> "Term":
-        return COMP(py_to_ast(other), self)
+        return COMP(other, self)
 
     def __rshift__(self, other: Any) -> "Term":
-        return CONJ(self, py_to_ast(other))
+        return CONJ(self, other)
 
     def __rrshift__(self, other: Any) -> "Term":
-        return CONJ(py_to_ast(other), self)
+        return CONJ(other, self)
 
     def __repr__(self) -> str:
         if self.type == TermType.TOP:
