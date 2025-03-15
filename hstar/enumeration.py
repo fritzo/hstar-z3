@@ -212,6 +212,10 @@ class Refiner:
                 elif old is False:
                     raise ValueError("contradiction")
 
+    def revisit_candidates(self, valid: bool) -> list[Term]:
+        """Return a list of previous candidates with given validity."""
+        return sorted(c for c in self._nodes if self._validity.get(c) is valid)
+
     def _grow(self) -> None:
         """Grow the refinement DAG."""
         counter["refiner.grow"] += 1
