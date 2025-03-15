@@ -8,6 +8,8 @@ import types
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from .hashcons import HashConsMeta
+
 _next_fresh = 0
 
 
@@ -24,8 +26,8 @@ class TermType(enum.Enum):
     _FRESH = "_FRESH"  # temporary for use in py_to_ast()
 
 
-@dataclass(frozen=True, slots=True)
-class Term:
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class Term(metaclass=HashConsMeta):
     """A term in the λ-join-calculus."""
 
     type: TermType
