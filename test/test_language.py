@@ -8,6 +8,7 @@ from hstar.language import (
     ABS,
     APP,
     BOT,
+    CB,
     COMP,
     JOIN,
     TOP,
@@ -16,10 +17,13 @@ from hstar.language import (
     B,
     C,
     I,
+    J,
     K,
     S,
     Term,
+    W,
     Y,
+    abstract,
     hoas,
     shift,
     subst,
@@ -155,3 +159,25 @@ def test_subst_eager() -> None:
     join_term = JOIN(VAR(0), VAR(1))  # 0 | 1
     assert subst(0, TOP, join_term) == JOIN(TOP, VAR(1))  # [TOP/0](0|1) = TOP|1
     assert subst(1, TOP, join_term) == JOIN(VAR(0), TOP)  # [TOP/1](0|1) = 0|TOP
+
+
+def test_abstraction() -> None:
+    assert abstract(v0) == I
+    assert abstract(v1) == APP(K, v0)
+
+    assert abstract(APP(APP(v1, v0), v0)) == APP(W, v0)
+    assert abstract(APP(APP(v1, v0), APP(v2, v0))) == APP(APP(S, v0), v1)
+    assert abstract(APP(APP(v1, v0), v2)) == APP(APP(C, v0), v1)
+    assert abstract(APP(v1, APP(v2, v0))) == COMP(v0, v1)
+
+    assert abstract(COMP(APP(v1, v0), APP(v2, v0))) == APP(APP(S, COMP(B, v0)), v1)
+    assert abstract(COMP(APP(v1, v0), v2)) == COMP(APP(CB, v1), v0)
+    assert abstract(COMP(v1, APP(v2, v0))) == COMP(APP(B, v0), v1)
+    assert abstract(COMP(v1, v0)) == APP(B, v0)
+    assert abstract(COMP(v0, v1)) == APP(CB, v0)
+
+    assert abstract(JOIN(APP(v1, v0), APP(v2, v0))) == JOIN(v0, v1)
+    assert abstract(JOIN(v1, APP(v2, v0))) == COMP(APP(J, v0), v1)
+    assert abstract(JOIN(APP(v1, v0), v2)) == COMP(APP(J, v1), v0)
+    assert abstract(JOIN(v1, v0)) == APP(J, v0)
+    assert abstract(JOIN(v0, v1)) == APP(J, v0)

@@ -12,6 +12,8 @@ from collections.abc import Callable
 import z3
 from z3 import ExprRef, Not
 
+from .functools import weak_key_cache
+
 # Term sort
 Term = z3.DeclareSort("Term")
 
@@ -56,9 +58,13 @@ def CONV(term: ExprRef) -> ExprRef:
     return Not(LEQ(term, BOT))
 
 
-def shift(term: ExprRef, start: int = 0) -> ExprRef:
+def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
     """
-    Increment free variables in a term, starting from index `start`.
+    Shift free variables in a term by delta, starting from index `start`.
+
+    Increments (delta > 0) or decrements (delta < 0) all free variables
+    with indices >= start by abs(delta).
+
     Eagerly applies shifting rules for Term expressions when possible,
     otherwise returns an unevaluated SHIFT call.
     """
@@ -83,28 +89,28 @@ def shift(term: ExprRef, start: int = 0) -> ExprRef:
                 # Handle VAR constructor
                 idx = term.arg(0).as_long()  # Get the index directly
                 if idx >= start:
-                    return VAR(idx + 1)
+                    return VAR(idx + delta)
                 else:
                     return term
             elif decl_name == "ABS":
                 # Handle ABS constructor
                 body = term.arg(0)
-                return ABS(shift(body, start + 1))
+                return ABS(shift(body, start + 1, delta))
             elif decl_name == "APP":
                 # Handle APP constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return APP(shift(lhs, start), shift(rhs, start))
+                return APP(shift(lhs, start, delta), shift(rhs, start, delta))
             elif decl_name == "JOIN":
                 # Handle JOIN constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return JOIN(shift(lhs, start), shift(rhs, start))
+                return JOIN(shift(lhs, start, delta), shift(rhs, start, delta))
             elif decl_name == "COMP":
                 # Handle COMP constructor
                 lhs = term.arg(0)
                 rhs = term.arg(1)
-                return COMP(shift(lhs, start), shift(rhs, start))
+                return COMP(shift(lhs, start, delta), shift(rhs, start, delta))
     except Exception as e:
         # If we encounter any exception, log it and return unevaluated SHIFT
         print(f"Exception in shift: {e}")
@@ -249,3 +255,116 @@ def subst(i: int, replacement: ExprRef, term: ExprRef) -> ExprRef:
 
     # Fall back to unevaluated SUBST for any other expressions
     return SUBST(idx, replacement, term)
+
+
+@weak_key_cache
+def free_vars(term: ExprRef) -> frozenset[int]:
+    """Return the set of de Bruijn VARs of free variables in a term."""
+    if z3.is_const(term) and term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+        return frozenset()
+    if z3.is_app(term):
+        decl = term.decl()
+        decl_name = str(decl)
+        if decl_name == "VAR":
+            i: int = term.arg(0).as_long()
+            return frozenset([i])
+        if decl_name == "ABS":
+            return frozenset(i + 1 for i in free_vars(term.arg(0)))
+        if decl_name == "APP" or decl_name == "JOIN" or decl_name == "COMP":
+            return free_vars(term.arg(0)) | free_vars(term.arg(1))
+    raise ValueError(f"Unknown term: {term}")
+
+
+def abstract(term: ExprRef) -> ExprRef:
+    """
+    A Curry-style combinatory abstraction algorithm.
+
+    This abstracts the de Bruijn indexed variable `VAR(0)` and shifts remaining
+    variables. This should satisfy `beta,eta |- ABS(term) = abstract(term)`, but
+    without introducing an `ABS` term.
+
+    Warning: this assumes the VAR in question never appears inside an ABS. It is
+    ok if ABS appears in term, but only in closed subterms.
+    """
+    # Handle expressions that don't contain VAR(0) directly
+    if not has_var_0(term):
+        # K abstraction
+        return APP(K, shift(term, delta=-1))
+
+    if z3.is_app(term):
+        decl = term.decl()
+        decl_name = str(decl)
+        if decl_name == "VAR":
+            # I abstraction
+            assert term.arg(0).as_long() == 0
+            return I
+
+        if decl_name == "APP":
+            # I,K,C,S,W,COMP,eta abstraction
+            lhs, rhs = term.arg(0), term.arg(1)
+            if has_var_0(lhs):
+                lhs_abs = abstract(lhs)
+                if has_var_0(rhs):
+                    if is_var_0(rhs):  # rhs is exactly VAR(0)
+                        return APP(W, lhs_abs)
+                    else:
+                        return APP(APP(S, lhs_abs), abstract(rhs))
+                else:
+                    return APP(APP(C, lhs_abs), shift(rhs, delta=-1))
+            else:
+                assert has_var_0(rhs)
+                if is_var_0(rhs):  # rhs is exactly VAR(0)
+                    return shift(lhs, delta=-1)
+                else:
+                    return COMP(shift(lhs, delta=-1), abstract(rhs))
+
+        elif decl_name == "COMP":
+            # K,B,CB,C,S,COMP,eta abstraction
+            lhs, rhs = term.arg(0), term.arg(1)
+            if has_var_0(lhs):
+                lhs_abs = abstract(lhs)
+                if has_var_0(rhs):
+                    return APP(APP(S, COMP(B, lhs_abs)), abstract(rhs))
+                else:
+                    if is_var_0(lhs):
+                        return APP(CB, shift(rhs, delta=-1))
+                    else:
+                        return COMP(APP(CB, shift(rhs, delta=-1)), lhs_abs)
+            else:
+                assert has_var_0(rhs)
+                if is_var_0(rhs):
+                    return APP(B, shift(lhs, delta=-1))
+                else:
+                    return COMP(APP(B, shift(lhs, delta=-1)), abstract(rhs))
+
+        elif decl_name == "JOIN":
+            # K-compose-eta abstraction
+            lhs, rhs = term.arg(0), term.arg(1)
+            if has_var_0(lhs):
+                if has_var_0(rhs):
+                    return JOIN(abstract(lhs), abstract(rhs))
+                elif is_var_0(lhs):
+                    return APP(J, shift(rhs, delta=-1))
+                else:
+                    return COMP(APP(J, shift(rhs, delta=-1)), abstract(lhs))
+            else:
+                assert has_var_0(rhs)
+                if is_var_0(rhs):
+                    return APP(J, shift(lhs, delta=-1))
+                else:
+                    return COMP(APP(J, shift(lhs, delta=-1)), abstract(rhs))
+
+    raise ValueError(f"Unsupported term: {term}")
+
+
+def has_var_0(term: ExprRef) -> bool:
+    """Check if VAR(0) appears in a term."""
+    return 0 in free_vars(term)
+
+
+def is_var_0(term: ExprRef) -> bool:
+    """Check if a term is exactly VAR(0)."""
+    if z3.is_app(term) and str(term.decl()) == "VAR":
+        i: int = term.arg(0).as_long()
+        return i == 0
+    return False
