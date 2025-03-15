@@ -13,7 +13,7 @@ import z3
 from hstar import normal
 from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
-from hstar.solvers import EQ, SIMPLE
+from hstar.solvers import SIMPLE
 from hstar.synthesis import Synthesizer
 
 
@@ -39,7 +39,7 @@ def main(args: argparse.Namespace) -> None:
 
     # Define a constraint that captures the SIMPLE type definition
     def constraint(candidate: normal.Term) -> z3.ExprRef:
-        return EQ(SIMPLE, nf_to_z3(candidate))
+        return SIMPLE == nf_to_z3(candidate)
 
     synthesizer = Synthesizer(ast_to_nf(sketch), constraint)
 

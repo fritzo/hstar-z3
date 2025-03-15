@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -13,7 +14,6 @@ from hstar.solvers import (
     COMP,
     CONV,
     DIV,
-    EQ,
     JOIN,
     KI,
     LEQ,
@@ -43,6 +43,8 @@ from hstar.solvers import (
     subst,
     unit,
 )
+
+logger = logging.getLogger(__name__)
 
 f, g, h = z3.Consts("f g h", Term)
 r, s, t = z3.Consts("r s t", Term)
@@ -193,6 +195,9 @@ def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     with solver, solver_timeout(solver, timeout_ms=1000):
         result = solver.check()
+        if result == z3.unsat:
+            core = solver.unsat_core()
+            logger.error(f"Unsat core:\n{core}")
         assert result != z3.unsat
 
 
@@ -272,29 +277,29 @@ def test_ordering(solver: z3.Solver, formula: z3.ExprRef) -> None:
 
 LAMBDA_EXAMPLES = {
     # Beta reduction
-    r"(\x.x)y = y": EQ(APP(I, y), y),
+    r"(\x.x)y = y": APP(I, y) == y,
     # Y combinator fixed-point property
-    "Y f = f(Y f)": EQ(APP(Y, f), APP(f, APP(Y, f))),
-    r"(\x.x)BOT = BOT": EQ(APP(I, BOT), BOT),
-    r"(\x.x)TOP = TOP": EQ(APP(I, TOP), TOP),
+    "Y f = f(Y f)": APP(Y, f) == APP(f, APP(Y, f)),
+    r"(\x.x)BOT = BOT": APP(I, BOT) == BOT,
+    r"(\x.x)TOP = TOP": APP(I, TOP) == TOP,
     # Eta conversion
-    r"\x.fx = f": EQ(ABS(APP(shift(f), VAR(0))), f),
+    r"\x.fx = f": ABS(APP(shift(f), VAR(0))) == f,
     # Function application monotonicity
     "f [= g => fx [= gx": Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x))),
     "x [= y => fx [= fy": Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y))),
     # Abstraction monotonicity
     r"x [= y -> \x [= \y": Implies(LEQ(x, y), LEQ(ABS(x), ABS(y))),
     # Distributivity
-    "(f|g)x = fx|gx": EQ(APP(JOIN(f, g), x), JOIN(APP(f, x), APP(g, x))),
+    "(f|g)x = fx|gx": APP(JOIN(f, g), x) == JOIN(APP(f, x), APP(g, x)),
     "fx|fy [= f(x|y)": LEQ(JOIN(APP(f, x), APP(f, y)), APP(f, JOIN(x, y))),
-    r"\(x|y) = \x|\y": EQ(ABS(JOIN(x, y)), JOIN(ABS(x), ABS(y))),
+    r"\(x|y) = \x|\y": ABS(JOIN(x, y)) == JOIN(ABS(x), ABS(y)),
     # BOT/TOP preservation
-    "BOT x = BOT": EQ(APP(BOT, x), BOT),
-    "TOP x = TOP": EQ(APP(TOP, x), TOP),
-    r"\BOT = BOT": EQ(ABS(BOT), BOT),
-    r"\TOP = TOP": EQ(ABS(TOP), TOP),
+    "BOT x = BOT": APP(BOT, x) == BOT,
+    "TOP x = TOP": APP(TOP, x) == TOP,
+    r"\BOT = BOT": ABS(BOT) == BOT,
+    r"\TOP = TOP": ABS(TOP) == TOP,
     # Extensionality
-    r"(/\x. fx=gx) => f=g": Implies(ForAll([x], EQ(APP(f, x), APP(g, x))), EQ(f, g)),
+    r"(/\x. fx=gx) => f=g": Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
 }
 
 
@@ -318,7 +323,7 @@ CONV_EXAMPLES = {
     "CONV(x) => TOP [= DIV x": Implies(CONV(x), LEQ(TOP, APP(DIV, x))),
     "TOP [= DIV x => CONV(x)": Implies(LEQ(TOP, APP(DIV, x)), CONV(x)),
     # Fixed point property
-    "DIV x = DIV(x TOP)": EQ(APP(DIV, x), APP(DIV, APP(x, TOP))),
+    "DIV x = DIV(x TOP)": APP(DIV, x) == APP(DIV, APP(x, TOP)),
     # Constant functions converge
     r"CONV(\x.TOP)": CONV(ABS(TOP)),
     r"CONV(\x.x)": CONV(ABS(VAR(0))),
@@ -442,7 +447,7 @@ def test_find_counterexample_3(solver: z3.Solver) -> None:
     # Build a deeply nested formula that's hard for Z3 to solve quickly
     for _ in range(10):
         complex_terms = APP(complex_terms, APP(JOIN(APP(Y, B), APP(C, S)), x))
-    formula = ForAll([x], EQ(complex_terms, complex_terms))  # Tautology but complex
+    formula = ForAll([x], complex_terms == complex_terms)  # Tautology but complex
     result, counter = find_counterexample(
         solver, formula, x, timeout_ms=1
     )  # Very short timeout

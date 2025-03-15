@@ -14,31 +14,23 @@ from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 
 import z3
-from z3 import And, ForAll, If, Implies, MultiPattern, Not, Or
+from z3 import ForAll, If, Implies, MultiPattern, Not, Or
 
 from .metrics import COUNTERS
 
 counter = COUNTERS[__name__]
 
-# Terms.
-Term = z3.Datatype("Term")
-Term.declare("TOP")
-Term.declare("BOT")
-Term.declare("JOIN", ("join_lhs", Term), ("join_rhs", Term))
-Term.declare("COMP", ("comp_lhs", Term), ("comp_rhs", Term))  # TODO remove?
-Term.declare("APP", ("app_lhs", Term), ("app_rhs", Term))
-Term.declare("VAR", ("index", z3.IntSort()))
-Term.declare("ABS", ("body", Term))
-Term = Term.create()
+# Term sort
+Term = z3.DeclareSort("Term")
 
-# Constructors.
-TOP = Term.TOP
-BOT = Term.BOT
-JOIN = Term.JOIN
-COMP = Term.COMP
-APP = Term.APP
-VAR = Term.VAR
-ABS = Term.ABS
+# Term constructors as uninterpreted functions
+TOP = z3.Const("TOP", Term)
+BOT = z3.Const("BOT", Term)
+JOIN = z3.Function("JOIN", Term, Term, Term)
+COMP = z3.Function("COMP", Term, Term, Term)
+APP = z3.Function("APP", Term, Term, Term)
+VAR = z3.Function("VAR", z3.IntSort(), Term)
+ABS = z3.Function("ABS", Term, Term)
 
 # De Bruijn operations.
 SHIFT = z3.Function("SHIFT", Term, z3.IntSort(), Term)
@@ -68,11 +60,6 @@ Y_ = ABS(APP(ABS(APP(v0, v0)), ABS(APP(v1, APP(v0, v0)))))
 V = ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))
 DIV = APP(V, ABS(APP(v0, TOP)))
 SIMPLE = z3.Const("SIMPLE", Term)  # TODO define
-
-
-def EQ(lhs: z3.ExprRef, rhs: z3.ExprRef) -> z3.ExprRef:
-    """Check whether two terms are observationally equivalent."""
-    return And(LEQ(lhs, rhs), LEQ(rhs, lhs))
 
 
 def CONV(term: z3.ExprRef) -> z3.ExprRef:
@@ -351,6 +338,11 @@ def order_theory(solver: z3.Solver) -> None:
         ForAll([x], LEQ(BOT, x), qid="leq_bot"),
         ForAll([x], LEQ(x, x), qid="leq_reflexive"),
         ForAll(
+            [x, y],
+            Implies(LEQ(x, y), Implies(LEQ(y, x), x == y)),
+            qid="leq_antisym",
+        ),
+        ForAll(
             [x, y, z],
             Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z))),
             qid="leq_trans",
@@ -366,31 +358,41 @@ def order_theory(solver: z3.Solver) -> None:
             qid="join_lub",
         ),  # Least upper bound property
         # JOIN is associative, commutative, and idempotent
-        ForAll([x, y], LEQ(JOIN(x, y), JOIN(y, x)), qid="join_commute"),
-        ForAll(
-            [x, y, z], EQ(JOIN(x, JOIN(y, z)), JOIN(JOIN(x, y), z)), qid="join_assoc"
-        ),
-        ForAll([x], LEQ(JOIN(x, x), x), qid="join_idem"),
+        ForAll([x, y], JOIN(x, y) == JOIN(y, x), qid="join_commute"),
+        ForAll([x, y, z], JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), z), qid="join_assoc"),
+        ForAll([x], JOIN(x, x) == x, qid="join_idem"),
         # JOIN with BOT/TOP
-        ForAll([x], LEQ(JOIN(x, BOT), x), qid="join_bot"),  # BOT is identity
-        ForAll([x], LEQ(JOIN(x, TOP), TOP), qid="join_top"),  # TOP absorbs
+        ForAll([x], JOIN(x, BOT) == x, qid="join_bot"),  # BOT is identity
+        ForAll([x], JOIN(x, TOP) == TOP, qid="join_top"),  # TOP absorbs
     )
 
 
 # Theory of lambda calculus.
-def lambda_theory(solver: z3.Solver) -> None:
+def lambda_theory(solver: z3.Solver, *, extensionality: bool = False) -> None:
     solver.add(
         # Composition properties
-        ForAll([f, g, x], EQ(APP(COMP(f, g), x), APP(f, APP(g, x))), qid="comp_def"),
-        ForAll([f], EQ(COMP(f, I), f), qid="comp_id_right"),
-        ForAll([f], EQ(COMP(I, f), f), qid="comp_id_left"),
-        ForAll([f], EQ(COMP(f, BOT), BOT), qid="comp_bot_right"),
-        ForAll([f], EQ(COMP(BOT, f), BOT), qid="comp_bot_left"),
-        ForAll([f], EQ(COMP(f, TOP), TOP), qid="comp_top_right"),
-        ForAll([f], EQ(COMP(TOP, f), TOP), qid="comp_top_left"),
+        ForAll(
+            [f, g, x],
+            APP(COMP(f, g), x) == APP(f, APP(g, x)),
+            patterns=[
+                MultiPattern(APP(COMP(f, g), x), APP(g, x)),
+                MultiPattern(COMP(f, g), APP(f, APP(g, x))),
+            ],
+            qid="comp_def",
+        ),
+        ForAll([f], COMP(f, I) == f, qid="comp_id_right"),
+        ForAll([f], COMP(I, f) == f, qid="comp_id_left"),
+        ForAll([f], COMP(BOT, f) == BOT, qid="comp_bot"),
+        ForAll([f], COMP(TOP, f) == TOP, qid="comp_top"),
         # Composition is associative
         ForAll(
-            [f, g, h], EQ(COMP(f, COMP(g, h)), COMP(COMP(f, g), h)), qid="comp_assoc"
+            [f, g, h],
+            COMP(f, COMP(g, h)) == COMP(COMP(f, g), h),
+            patterns=[
+                MultiPattern(COMP(f, COMP(g, h)), COMP(f, g)),
+                MultiPattern(COMP(COMP(f, g), h), COMP(g, h)),
+            ],
+            qid="comp_assoc",
         ),
         # Composition is monotonic in both arguments
         ForAll(
@@ -404,28 +406,88 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="comp_mono_right",
         ),
         # Combinator equations
-        EQ(KI, APP(K, I)),
-        EQ(CB, APP(C, B)),
-        EQ(Y, Y_),
+        KI == app(K, I),
+        CB == app(C, B),
+        J == app(C, J),
+        I == app(W, J),
+        Y == Y_,
         # Beta reduction of combinators
-        ForAll([x], EQ(APP(I, x), x), qid="beta_i"),
-        ForAll([x, y], EQ(app(K, x, y), x), qid="beta_k"),
-        ForAll([x, y], EQ(app(KI, x, y), y), qid="beta_ki"),
-        ForAll([x, y], EQ(app(J, x, y), JOIN(x, y)), qid="beta_k"),
-        ForAll([x, y, z], EQ(app(B, x, y, z), app(x, app(y, z))), qid="beta_b"),
-        ForAll([x, y, z], EQ(app(CB, x, y, z), app(x, app(z, y))), qid="beta_b"),
-        ForAll([x, y, z], EQ(app(C, x, y, z), app(x, z, y)), qid="beta_c"),
-        ForAll([x, y, z], EQ(app(W, x, y), app(x, y, y)), qid="beta_s"),
-        ForAll([x, y, z], EQ(app(S, x, y, z), app(x, z, app(y, z))), qid="beta_s"),
-        ForAll([f], EQ(APP(Y, f), APP(f, APP(Y, f))), qid="beta_y"),
-        # Fixed point equations
-        EQ(app(S, I, Y), Y),
+        ForAll([x], app(I, x) == x, qid="beta_i"),
         ForAll(
-            [y],
-            Implies(EQ(app(S, I, y), y), EQ(y, Y)),
-            patterns=[MultiPattern(LEQ(app(S, I, y), y), LEQ(y, app(S, I, y)))],
-            qid="siy",
+            [x, y],
+            app(K, x, y) == x,
+            # patterns=[APP(K, x)],
+            qid="beta_k",
         ),
+        ForAll(
+            [x, y],
+            app(KI, x, y) == y,
+            # patterns=[Pattern(APP(KI, x))],
+            qid="beta_ki",
+        ),
+        ForAll(
+            [x, y],
+            app(J, x, y) == JOIN(x, y),
+            patterns=[
+                # app(J, x, y),
+                MultiPattern(app(J, x), JOIN(x, y)),
+            ],
+            qid="beta_j",
+        ),
+        ForAll(
+            [x, y, z],
+            app(B, x, y, z) == app(x, app(y, z)),
+            patterns=[
+                MultiPattern(app(B, x, y, z), app(y, z)),
+                MultiPattern(app(B, x, y), app(x, app(y, z))),
+            ],
+            qid="beta_b",
+        ),
+        ForAll(
+            [x, y, z],
+            app(CB, x, y, z) == app(x, app(z, y)),
+            patterns=[
+                MultiPattern(app(CB, x, y, z), app(z, y)),
+                MultiPattern(app(CB, x, y), app(x, app(z, y))),
+            ],
+            qid="beta_cb",
+        ),
+        ForAll(
+            [x, y, z],
+            app(C, x, y, z) == app(x, z, y),
+            patterns=[
+                MultiPattern(app(C, x, y, z), app(x, z)),
+                MultiPattern(app(C, x, y), app(x, z, y)),
+            ],
+            qid="beta_c",
+        ),
+        ForAll(
+            [x, y],
+            app(W, x, y) == app(x, y, y),
+            patterns=[
+                MultiPattern(app(W, x, y), app(x, y)),
+                MultiPattern(app(W, x), app(x, y, y)),
+            ],
+            qid="beta_w",
+        ),
+        ForAll(
+            [x, y, z],
+            app(S, x, y, z) == app(x, z, app(y, z)),
+            patterns=[
+                MultiPattern(app(S, x, y, z), app(x, z), app(y, z)),
+                MultiPattern(app(S, x, y), app(x, z, app(y, z))),
+            ],
+            qid="beta_s",
+        ),
+        ForAll(
+            [f],
+            app(Y, f) == app(f, app(Y, f)),
+            # patterns=[app(Y, f)],
+            qid="beta_y",
+        ),
+        # Fixed point equations
+        app(S, I, Y) == Y,
+        ForAll([y], Implies(app(S, I, y) == y, y == Y), qid="siy"),
         ForAll(
             [f, x],
             Implies(LEQ(APP(f, x), x), LEQ(APP(Y, f), x)),
@@ -433,53 +495,80 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="y_fix",
         ),
         # Beta reduction using Z3's SUBST
-        ForAll([x, y], EQ(APP(ABS(x), y), SUBST(0, y, x)), qid="beta_app_abs"),
+        ForAll([x, y], APP(ABS(x), y) == SUBST(0, y, x), qid="beta_app_abs"),
         # APP-JOIN distributivity (both directions)
         ForAll(
             [f, g, x],
-            EQ(APP(JOIN(f, g), x), JOIN(APP(f, x), APP(g, x))),
+            APP(JOIN(f, g), x) == JOIN(APP(f, x), APP(g, x)),
+            patterns=[
+                MultiPattern(APP(JOIN(f, g), x), APP(g, x), APP(f, x)),
+                MultiPattern(JOIN(f, g), JOIN(APP(f, x), APP(g, x))),
+            ],
             qid="app_join_dist",
         ),
         ForAll(
             [f, x, y],
             LEQ(JOIN(APP(f, x), APP(f, y)), APP(f, JOIN(x, y))),
+            patterns=[
+                MultiPattern(JOIN(APP(f, x), APP(f, y)), JOIN(x, y)),
+                MultiPattern(APP(f, x), APP(f, y), APP(f, JOIN(x, y))),
+            ],
             qid="app_join_mono",
         ),
         # APP monotonicity (in both arguments)
         ForAll(
             [f, g, x],
             Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x))),
-            patterns=[MultiPattern(LEQ(f, g), APP(f, x), APP(g, x))],
+            patterns=[
+                MultiPattern(LEQ(f, g), APP(f, x), APP(g, x)),
+                LEQ(APP(f, x), APP(g, x)),
+            ],
             qid="app_mono_fun",
         ),
         ForAll(
             [f, x, y],
             Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y))),
-            patterns=[MultiPattern(LEQ(x, y), APP(f, x), APP(f, y))],
+            patterns=[
+                MultiPattern(LEQ(x, y), APP(f, x), APP(f, y)),
+                LEQ(APP(f, x), APP(f, y)),
+            ],
             qid="app_mono_arg",
         ),
         # ABS monotonicity
+        ForAll([x, y], (ABS(x) == ABS(y)) == (x == y), qid="abs_inj"),
+        ForAll([x, y], LEQ(x, y) == LEQ(ABS(x), ABS(y)), qid="abs_mono"),
+        # BOT/TOP preservation
+        ForAll([x], APP(BOT, x) == BOT, qid="app_bot"),
+        ForAll([x], APP(TOP, x) == TOP, qid="app_top"),
+        ABS(BOT) == BOT,
+        ABS(TOP) == TOP,
+        # JOIN distributivity over ABS
         ForAll(
             [x, y],
-            Implies(LEQ(x, y), LEQ(ABS(x), ABS(y))),
-            patterns=[MultiPattern(LEQ(x, y), ABS(x), ABS(y))],
-            qid="abs_mono",
+            ABS(JOIN(x, y)) == JOIN(ABS(x), ABS(y)),
+            patterns=[
+                MultiPattern(ABS(JOIN(x, y)), ABS(x), ABS(y)),
+                MultiPattern(JOIN(x, y), JOIN(ABS(x), ABS(y))),
+            ],
+            qid="abs_join_dist",
         ),
-        # BOT/TOP preservation
-        ForAll([x], EQ(APP(BOT, x), BOT), qid="app_bot"),
-        ForAll([x], EQ(APP(TOP, x), TOP), qid="app_top"),
-        EQ(ABS(BOT), BOT),
-        EQ(ABS(TOP), TOP),
-        # JOIN distributivity over ABS
-        ForAll([x, y], EQ(ABS(JOIN(x, y)), JOIN(ABS(x), ABS(y))), qid="abs_join_dist"),
+        # Eta conversion
+        ForAll([f], ABS(APP(SHIFT(f, 0), VAR(0))) == f, qid="eta_conv"),
+    )
+    if not extensionality:
+        return
+    solver.add(
         # Extensionality
+        ForAll(
+            [f, g],
+            Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
+            qid="ext_app",
+        ),
         ForAll(
             [f, g],
             Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g)),
             qid="ext_leq",
         ),
-        # Eta conversion
-        ForAll([f], EQ(ABS(APP(shift(f), VAR(0))), f), qid="eta_conv"),
     )
 
 
@@ -521,18 +610,18 @@ def closure_theory(solver: z3.Solver) -> None:
     solver.add(
         # # Types are closures.
         ForAll([t], LEQ(I, APP(V, t)), qid="v_id"),
-        ForAll([t], EQ(COMP(APP(V, t), APP(V, t)), APP(V, t)), qid="v_comp"),
-        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))),
-        EQ(V, ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))),
+        ForAll([t], COMP(APP(V, t), APP(V, t)) == APP(V, t), qid="v_comp"),
+        V == ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0))))),
+        V == ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1))))),
         # TYPE is a type.
         LEQ(I, V),
-        EQ(COMP(V, V), V),
-        ForAll([t], EQ(APP(V, APP(V, t)), APP(V, t)), qid="v_idem"),
+        COMP(V, V) == V,
+        ForAll([t], APP(V, APP(V, t)) == APP(V, t), qid="v_idem"),
         # Inhabitants are fixed points.
         OFTYPE(V, V),
         ForAll([t], OFTYPE(APP(V, t), V), qid="type_of_type"),
-        ForAll([t], EQ(APP(V, t), JOIN(I, COMP(t, APP(V, t)))), qid="v_join_left"),
-        ForAll([t], EQ(APP(V, t), JOIN(I, COMP(APP(V, t), t))), qid="v_join_right"),
+        ForAll([t], APP(V, t) == JOIN(I, COMP(t, APP(V, t))), qid="v_join_left"),
+        ForAll([t], APP(V, t) == JOIN(I, COMP(APP(V, t), t)), qid="v_join_right"),
     )
 
 
@@ -546,7 +635,7 @@ def declare_type(
         yield OFTYPE(x, t)
     # t contains only its inhabitants
     # FIXME how does this interact with variables?
-    yield ForAll([x], Or(*[EQ(APP(t, x), i) for i in inhabs]), qid=f"inhab_{qid}")
+    yield ForAll([x], Or(*[APP(t, x) == i for i in inhabs]), qid=f"inhab_{qid}")
 
 
 def types_theory(solver: z3.Solver) -> None:
