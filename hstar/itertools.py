@@ -1,4 +1,15 @@
-from collections.abc import Iterator
+import itertools
+from collections.abc import Hashable, Iterable, Iterator
+from typing import TypeVar
+
+_T = TypeVar("_T", bound=Hashable)
+
+
+def iter_subsets(set_: Iterable[_T]) -> Iterator[set[_T]]:
+    """Iterate over all subsets of a set."""
+    list_ = list(set_)
+    for cases in itertools.product([0, 1], repeat=len(list_)):
+        yield {x for (x, case) in zip(list_, cases, strict=True) if case}
 
 
 def partitions(total: int, num_parts: int) -> Iterator[tuple[int, ...]]:

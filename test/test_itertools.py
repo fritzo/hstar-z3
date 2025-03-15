@@ -1,4 +1,24 @@
-from hstar.itertools import partitions, weighted_partitions
+from hstar.itertools import iter_subsets, partitions, weighted_partitions
+
+
+def test_iter_subsets() -> None:
+    actual = set(map(frozenset, iter_subsets(range(3))))
+    expected = set(
+        map(
+            frozenset,
+            [
+                [],
+                [1],
+                [2],
+                [1, 2],
+                [0],
+                [0, 1],
+                [0, 2],
+                [0, 1, 2],
+            ],
+        )
+    )
+    assert actual == expected
 
 
 def test_partitions() -> None:
