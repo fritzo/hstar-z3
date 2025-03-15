@@ -3,7 +3,7 @@ import logging
 import pytest
 import z3
 
-from hstar import ast, normal, solvers
+from hstar import ast, language, normal
 from hstar.bridge import ast_to_nf, nf_to_z3, z3_to_nf
 
 logger = logging.getLogger(__name__)
@@ -11,52 +11,53 @@ logger = logging.getLogger(__name__)
 # A list of examples with Python terms and their corresponding Z3 expressions
 EXAMPLES: list[tuple[normal.Term, z3.ExprRef]] = [
     # Basic Terms
-    (normal.TOP, solvers.TOP),  # TOP constant
-    (normal.BOT, solvers.BOT),  # BOT constant (empty join)
-    (normal.VAR(0), solvers.VAR(0)),  # Variable 0
-    (normal.VAR(1), solvers.VAR(1)),  # Variable 1
+    (normal.TOP, language.TOP),  # TOP constant
+    (normal.BOT, language.BOT),  # BOT constant (empty join)
+    (normal.VAR(0), language.VAR(0)),  # Variable 0
+    (normal.VAR(1), language.VAR(1)),  # Variable 1
     # Lambda Abstractions
     # λx.x (identity)
-    (normal.ABS(normal.VAR(0)), solvers.ABS(solvers.VAR(0))),
+    (normal.ABS(normal.VAR(0)), language.ABS(language.VAR(0))),
     # λx.y (constant function)
-    (normal.ABS(normal.VAR(1)), solvers.ABS(solvers.VAR(1))),
+    (normal.ABS(normal.VAR(1)), language.ABS(language.VAR(1))),
     # Applications
     # x y
     (
         normal.APP(normal.VAR(0), normal.VAR(1)),
-        solvers.APP(solvers.VAR(0), solvers.VAR(1)),
+        language.APP(language.VAR(0), language.VAR(1)),
     ),
     # Joins
     # x | y
     (
         normal.JOIN(normal.VAR(0), normal.VAR(1)),
-        solvers.JOIN(solvers.VAR(0), solvers.VAR(1)),
+        language.JOIN(language.VAR(0), language.VAR(1)),
     ),
     # Complex nested terms
     # λx.x y
     (
         normal.ABS(normal.APP(normal.VAR(0), normal.VAR(1))),
-        solvers.ABS(solvers.APP(solvers.VAR(0), solvers.VAR(1))),
+        language.ABS(language.APP(language.VAR(0), language.VAR(1))),
     ),
     # λx.x y
     (
         normal.ABS(normal.APP(normal.VAR(0), normal.VAR(1))),
-        solvers.ABS(solvers.APP(solvers.VAR(0), solvers.VAR(1))),
+        language.ABS(language.APP(language.VAR(0), language.VAR(1))),
     ),
     # (λx.x) | (y z)
     (
         normal.JOIN(
             normal.ABS(normal.VAR(0)), normal.APP(normal.VAR(1), normal.VAR(2))
         ),
-        solvers.JOIN(
-            solvers.ABS(solvers.VAR(0)), solvers.APP(solvers.VAR(1), solvers.VAR(2))
+        language.JOIN(
+            language.ABS(language.VAR(0)),
+            language.APP(language.VAR(1), language.VAR(2)),
         ),
     ),
     # Multiple joins
     # x | y | z
     (
         normal.JOIN(normal.VAR(0), normal.VAR(1), normal.VAR(2)),
-        solvers.JOIN(solvers.VAR(0), solvers.JOIN(solvers.VAR(1), solvers.VAR(2))),
+        language.JOIN(language.VAR(0), language.JOIN(language.VAR(1), language.VAR(2))),
     ),
 ]
 IDS = [repr(term) for term, _ in EXAMPLES]

@@ -10,11 +10,12 @@ from collections.abc import Callable
 
 import z3
 
-from . import solvers
+from . import language
 from .enumeration import EnvRefiner, Refiner
 from .metrics import COUNTERS
 from .normal import Env, Term
-from .solvers import add_theory, find_counterexample, try_prove
+from .solvers import find_counterexample, try_prove
+from .theory import add_theory
 
 logger = logging.getLogger(__name__)
 counter = COUNTERS[__name__]
@@ -149,7 +150,7 @@ class CEGISSynthesizer:
                     return candidate, False
 
         # Verify candidate against the full specification
-        example = z3.Const("example", solvers.Term)
+        example = z3.Const("example", language.Term)
         formula = z3.ForAll([example], self.constraint(candidate, example))
         valid, counterexample = find_counterexample(
             self.solver, formula, example, timeout_ms=timeout_ms

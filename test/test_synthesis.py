@@ -4,10 +4,10 @@ import pytest
 import z3
 from immutables import Map
 
-from hstar import solvers
+from hstar import language
 from hstar.bridge import nf_to_z3
+from hstar.language import LEQ
 from hstar.normal import ABS, APP, VAR, Env, Term, app, env_free_vars
-from hstar.solvers import LEQ
 from hstar.synthesis import CEGISSynthesizer, EnvSynthesizer, Synthesizer
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def test_cegis_synthesizer() -> None:
     def constraint(candidate: Term, example: z3.ExprRef) -> z3.ExprRef:
         r = nf_to_z3(APP(candidate, ABS(ABS(VAR(1)))))
         s = nf_to_z3(APP(candidate, ABS(ABS(VAR(0)))))
-        return LEQ(solvers.APP(s, solvers.APP(r, example)), example)
+        return LEQ(language.APP(s, language.APP(r, example)), example)
 
     synthesizer = CEGISSynthesizer(sketch, constraint)
     for _ in range(10):

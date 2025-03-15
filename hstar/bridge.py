@@ -7,7 +7,7 @@ normal.py (Python objects) and the Z3 terms in solvers.py (symbolic expressions)
 
 import z3
 
-from hstar import ast, normal, solvers
+from hstar import ast, language, normal
 
 from .functools import weak_key_cache
 
@@ -25,7 +25,7 @@ def nf_to_z3(term: normal.Term) -> z3.ExprRef:
     """
     # Special case for BOT (empty join)
     if not term.parts:
-        return solvers.BOT
+        return language.BOT
 
     # If there's just one part, convert it directly
     if len(term.parts) == 1:
@@ -40,8 +40,8 @@ def nf_to_z3(term: normal.Term) -> z3.ExprRef:
     # Build the JOIN tree in right-associative order (last two elements first)
     result = _nf_to_z3(sorted_parts[-1])
     for part in reversed(sorted_parts[1:-1]):
-        result = solvers.JOIN(_nf_to_z3(part), result)
-    return solvers.JOIN(_nf_to_z3(sorted_parts[0]), result)
+        result = language.JOIN(_nf_to_z3(part), result)
+    return language.JOIN(_nf_to_z3(sorted_parts[0]), result)
 
     # This should never happen (length would be 0 or 1, handled above)
     raise ValueError("Unexpected term parts length")
@@ -58,22 +58,22 @@ def _nf_to_z3(term: normal._Term) -> z3.ExprRef:
         A Z3 term expression
     """
     if term.typ == normal.TermType.TOP:
-        return solvers.TOP
+        return language.TOP
 
     elif term.typ == normal.TermType.VAR:
-        return solvers.VAR(term.varname)
+        return language.VAR(term.varname)
 
     elif term.typ == normal.TermType.ABS:
         assert term.head is not None
         body_z3 = _nf_to_z3(term.head)
-        return solvers.ABS(body_z3)
+        return language.ABS(body_z3)
 
     elif term.typ == normal.TermType.APP:
         assert term.head is not None
         assert term.body is not None
         head_z3 = _nf_to_z3(term.head)
         body_z3 = nf_to_z3(term.body)
-        return solvers.APP(head_z3, body_z3)
+        return language.APP(head_z3, body_z3)
 
     raise ValueError(f"Unexpected term type: {term.typ}")
 
@@ -93,10 +93,10 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
         A normal.Term instance
     """
     # Handle special constants first
-    if z3.eq(term, solvers.TOP):
+    if z3.eq(term, language.TOP):
         return normal.TOP
 
-    if z3.eq(term, solvers.BOT):
+    if z3.eq(term, language.BOT):
         return normal.BOT
 
     # Check if we have a symbolic variable (like a, x, etc.)

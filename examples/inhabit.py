@@ -11,8 +11,8 @@ import argparse
 import z3
 
 from hstar.bridge import nf_to_z3
+from hstar.language import OFTYPE, bool_, boool, pair, pre_pair, semi, unit
 from hstar.normal import VAR, Term
-from hstar.solvers import OFTYPE, bool_, boool, pair, pre_pair, semi, unit
 from hstar.synthesis import Synthesizer
 
 TYPES = {

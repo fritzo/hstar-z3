@@ -13,7 +13,7 @@ import z3
 
 from hstar.logging import setup_color_logging
 from hstar.profile import summarize
-from hstar.solvers import add_theory
+from hstar.theory import add_theory
 
 logger = logging.getLogger(__name__)
 

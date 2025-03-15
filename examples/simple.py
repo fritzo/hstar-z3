@@ -13,7 +13,7 @@ import z3
 from hstar import normal
 from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
-from hstar.solvers import SIMPLE
+from hstar.language import SIMPLE
 from hstar.synthesis import Synthesizer
 
 

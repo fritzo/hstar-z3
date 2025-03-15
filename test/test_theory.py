@@ -1,17 +1,15 @@
 import logging
 from collections.abc import Iterator
-from typing import Any
 
 import pytest
 import z3
 from z3 import And, ForAll, Implies, Not
 
-from hstar.solvers import (
+from hstar.language import (
     ABS,
     ANY,
     APP,
     BOT,
-    COMP,
     CONV,
     DIV,
     JOIN,
@@ -30,19 +28,16 @@ from hstar.solvers import (
     Term,
     V,
     Y,
-    add_theory,
     bool_,
     boool,
-    find_counterexample,
-    hoas,
     pair,
     pre_pair,
     semi,
     shift,
-    solver_timeout,
-    subst,
     unit,
 )
+from hstar.solvers import find_counterexample, solver_timeout, try_prove
+from hstar.theory import add_theory
 
 logger = logging.getLogger(__name__)
 
@@ -69,128 +64,6 @@ def solver(base_solver: z3.Solver) -> Iterator[z3.Solver]:
         yield base_solver
 
 
-def test_shift_eager() -> None:
-    """Test eager evaluation of shift function."""
-    # Test variable shifting
-    assert shift(VAR(0)) == VAR(1)
-    assert shift(VAR(1)) == VAR(2)
-    assert shift(VAR(2)) == VAR(3)
-
-    # Test variable with custom starting point
-    assert shift(VAR(0), 1) == VAR(0)  # No shift, index < starting_at
-    assert shift(VAR(1), 1) == VAR(2)  # Shift by 1, index >= starting_at
-
-    # Test abstraction
-    assert shift(ABS(VAR(0))) == ABS(VAR(0))  # Index bound by abstraction, so no shift
-    assert shift(ABS(VAR(1))) == ABS(VAR(2))  # Free variable gets shifted
-
-    # Test application
-    assert shift(APP(VAR(0), VAR(1))) == APP(VAR(1), VAR(2))
-
-    # Test join
-    assert shift(JOIN(VAR(0), VAR(1))) == JOIN(VAR(1), VAR(2))
-
-    # Test composition
-    assert shift(COMP(VAR(0), VAR(1))) == COMP(VAR(1), VAR(2))
-
-    # Test constants remain unchanged
-    assert shift(TOP) == TOP
-    assert shift(BOT) == BOT
-
-    # Test basic combinators
-    assert shift(I) == I
-    assert shift(K) == K
-    assert shift(B) == B
-    assert shift(C) == C
-    assert shift(S) == S
-    assert shift(Y) == Y
-
-    # Test nested structures
-    assert shift(ABS(APP(VAR(0), VAR(1)))) == ABS(APP(VAR(0), VAR(2)))
-    assert shift(APP(ABS(VAR(0)), VAR(1))) == APP(ABS(VAR(0)), VAR(2))
-
-
-# Each example is a pair of (python_lambda, expected_z3_term)
-HOAS_EXAMPLES = [
-    (lambda x: x, ABS(VAR(0))),
-    (lambda x, y: x, ABS(ABS(VAR(1)))),
-    (lambda x, y: y, ABS(ABS(VAR(0)))),
-    (lambda x: TOP, ABS(TOP)),
-    (lambda x: BOT, ABS(BOT)),
-    (lambda x, y: JOIN(x, y), ABS(ABS(JOIN(VAR(1), VAR(0))))),
-    (lambda x, y: APP(x, y), ABS(ABS(APP(VAR(1), VAR(0))))),
-    pytest.param(
-        lambda x, y: x(y),
-        ABS(ABS(APP(VAR(1), VAR(0)))),
-        marks=[pytest.mark.xfail(reason="TODO handle Python application")],
-    ),
-    pytest.param(
-        lambda x, y: x | y,  # Python or
-        ABS(ABS(JOIN(VAR(1), VAR(0)))),
-        marks=[pytest.mark.xfail(reason="TODO convert Python or to JOIN")],
-    ),
-    pytest.param(
-        lambda x, y: (x, y),  # Python tuple
-        ABS(ABS(TUPLE(VAR(1), VAR(0)))),
-        marks=[pytest.mark.xfail(reason="TODO convert Python tuples to TUPLE")],
-    ),
-]
-
-
-@pytest.mark.parametrize("pythonic, expected", HOAS_EXAMPLES, ids=str)
-def test_hoas(pythonic: Any, expected: z3.ExprRef) -> None:
-    assert hoas(pythonic) == expected
-
-
-def test_subst_eager() -> None:
-    """Test eager evaluation of substitution function."""
-    # Basic variable substitution
-    assert subst(0, TOP, VAR(0)) == TOP  # [TOP/0]0 = TOP
-    assert subst(0, TOP, VAR(1)) == VAR(1)  # [TOP/0]1 = 1
-    assert subst(1, TOP, VAR(0)) == VAR(0)  # [TOP/1]0 = 0
-    assert subst(1, TOP, VAR(1)) == TOP  # [TOP/1]1 = TOP
-
-    # Identity function substitution
-    id_term = ABS(VAR(0))  # \x.x
-    assert subst(0, TOP, id_term) == id_term  # [TOP/0](\x.x) = \x.x
-    assert subst(1, TOP, id_term) == id_term  # [TOP/1](\x.x) = \x.x
-
-    # Application substitution
-    app_term = APP(VAR(0), VAR(1))  # 0 1
-    assert subst(0, TOP, app_term) == APP(TOP, VAR(1))  # [TOP/0](0 1) = TOP 1
-    assert subst(1, TOP, app_term) == APP(VAR(0), TOP)  # [TOP/1](0 1) = 0 TOP
-
-    # Nested abstraction substitution
-    nested = ABS(APP(VAR(1), VAR(0)))  # \x.1 x
-    # For [TOP/0](\x.1 x), the VAR(1) becomes VAR(2) under the abstraction,
-    # so TOP gets shifted
-    assert subst(0, TOP, nested) == ABS(APP(TOP, VAR(0)))
-    # For [TOP/1](\x.1 x), VAR(1) inside abstraction doesn't match VAR(2)
-    # (the shifted index)
-    assert (
-        subst(1, TOP, nested) == nested
-    )  # Term unchanged - VAR(1) inside abstraction is different from outer VAR(1)
-
-    # More complex term with bound and free variables
-    complex_term = ABS(APP(VAR(0), APP(VAR(1), VAR(2))))  # \x. x (1 2)
-    # When substituting for var 1
-    result = subst(1, TOP, complex_term)
-    # Expected: \x. x (1 TOP) - this is what our implementation gives
-    expected = ABS(APP(VAR(0), APP(VAR(1), TOP)))
-    assert result == expected
-
-    # When substituting for var 0
-    result2 = subst(0, TOP, complex_term)
-    # Expected: \x. x (TOP 2) - this is what our implementation gives
-    expected2 = ABS(APP(VAR(0), APP(TOP, VAR(2))))
-    assert result2 == expected2
-
-    # Join substitution
-    join_term = JOIN(VAR(0), VAR(1))  # 0 | 1
-    assert subst(0, TOP, join_term) == JOIN(TOP, VAR(1))  # [TOP/0](0|1) = TOP|1
-    assert subst(1, TOP, join_term) == JOIN(VAR(0), TOP)  # [TOP/1](0|1) = 0|TOP
-
-
 def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     with solver, solver_timeout(solver, timeout_ms=1000):
@@ -199,37 +72,6 @@ def test_consistency(solver: z3.Solver) -> None:
             core = solver.unsat_core()
             logger.error(f"Unsat core:\n{core}")
         assert result != z3.unsat
-
-
-def try_prove(solver: z3.Solver, formula: z3.ExprRef) -> tuple[bool | None, str | None]:
-    """
-    Try to prove a formula is valid or invalid.
-
-    Args:
-        solver: Z3 solver to use
-        formula: Formula to check validity of
-
-    Returns:
-        Tuple of:
-        - True if formula proved valid
-        - False if formula proved invalid
-        - None if formula is satisfiable but not valid
-        And the counterexample model string (if formula is not valid)
-    """
-    with solver:
-        solver.add(Not(formula))
-        result = solver.check()
-        if result == z3.unsat:
-            return True, None
-        if result == z3.sat:
-            model = solver.model()
-            assert model is not None, "Got sat result but no model!"
-            # Format model while still in context
-            model_str = "\n".join(f"{d} = {model[d]}" for d in model.decls())
-            return False, model_str
-        if result == z3.unknown:
-            return None, None
-        raise ValueError(f"Z3 returned unexpected result: {result}")
 
 
 def check_that(solver: z3.Solver, formula: z3.ExprRef) -> None:
