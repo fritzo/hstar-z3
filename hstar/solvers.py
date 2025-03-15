@@ -275,26 +275,31 @@ def de_bruijn_theory(solver: z3.Solver) -> None:
         ForAll(
             [i, start],
             SHIFT(VAR(i), start) == VAR(If(i >= start, i + 1, i)),
+            patterns=[MultiPattern(SHIFT(VAR(i), start))],
             qid="shift_var",
         ),
         ForAll(
             [x, start],
             SHIFT(ABS(x), start) == ABS(SHIFT(x, start + 1)),
+            patterns=[MultiPattern(SHIFT(ABS(x), start))],
             qid="shift_abs",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(APP(lhs, rhs), start) == APP(SHIFT(lhs, start), SHIFT(rhs, start)),
+            patterns=[MultiPattern(SHIFT(APP(lhs, rhs), start))],
             qid="shift_app",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(JOIN(lhs, rhs), start) == JOIN(SHIFT(lhs, start), SHIFT(rhs, start)),
+            patterns=[MultiPattern(SHIFT(JOIN(lhs, rhs), start))],
             qid="shift_join",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(COMP(lhs, rhs), start) == COMP(SHIFT(lhs, start), SHIFT(rhs, start)),
+            patterns=[MultiPattern(SHIFT(COMP(lhs, rhs), start))],
             qid="shift_comp",
         ),
         ForAll([start], SHIFT(TOP, start) == TOP, qid="shift_top"),
@@ -302,7 +307,8 @@ def de_bruijn_theory(solver: z3.Solver) -> None:
         # SUBST axioms
         ForAll(
             [j, i, x],
-            If(j == i, SUBST(i, x, VAR(j)) == x, SUBST(i, x, VAR(j)) == VAR(j)),
+            SUBST(i, x, VAR(j)) == If(j == i, x, VAR(j)),
+            patterns=[MultiPattern(SUBST(i, x, VAR(j)))],
             qid="subst_var",
         ),
         ForAll(
