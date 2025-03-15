@@ -384,7 +384,7 @@ def order_theory(solver: z3.Solver) -> None:
 
 
 # Theory of lambda calculus.
-def lambda_theory(solver: z3.Solver, *, extensionality: bool = False) -> None:
+def lambda_theory(solver: z3.Solver) -> None:
     solver.add(
         # Composition properties
         ForAll(
@@ -571,8 +571,11 @@ def lambda_theory(solver: z3.Solver, *, extensionality: bool = False) -> None:
         # Eta conversion
         ForAll([f], ABS(APP(SHIFT(f, 0), VAR(0))) == f, qid="eta_conv"),
     )
-    if not extensionality:
-        return
+
+
+def extensionality_theory(solver: z3.Solver) -> None:
+    # FIXME these hang.
+    return
     solver.add(
         # Extensionality
         ForAll(
@@ -669,6 +672,7 @@ def add_theory(solver: z3.Solver, types: bool = False) -> None:
     de_bruijn_theory(solver)
     order_theory(solver)
     lambda_theory(solver)
+    extensionality_theory(solver)
     simple_theory(solver)
     closure_theory(solver)
     if types:
