@@ -358,9 +358,8 @@ SIMPLE_EXAMPLES = {
     "SIMPLE [= TOP": LEQ(SIMPLE, TOP),
     "BOT [= SIMPLE": LEQ(BOT, SIMPLE),
     "<I,I> [= SIMPLE": LEQ(TUPLE(I, I), SIMPLE),
-    r"<\f.\x.f, \f.f TOP> [= SIMPLE": pytest.param(
-        LEQ(TUPLE(ABS(ABS(VAR(1))), ABS(APP(VAR(0), TOP))), SIMPLE),
-        marks=[pytest.mark.xfail(reason="FIXME")],
+    r"<\f.\x.f, \f.f TOP> [= SIMPLE": LEQ(
+        TUPLE(ABS(ABS(VAR(1))), ABS(APP(VAR(0), TOP))), SIMPLE
     ),
 }
 

@@ -14,7 +14,7 @@ from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 
 import z3
-from z3 import ForAll, If, Implies, MultiPattern, Not, Or
+from z3 import And, ForAll, If, Implies, MultiPattern, Not, Or
 
 from .metrics import COUNTERS
 
@@ -345,7 +345,8 @@ def order_theory(solver: z3.Solver) -> None:
         ForAll([x], LEQ(x, x), qid="leq_reflexive"),
         ForAll(
             [x, y],
-            Implies(LEQ(x, y), Implies(LEQ(y, x), x == y)),
+            And(LEQ(x, y), LEQ(y, x)) == (x == y),
+            patterns=[MultiPattern(LEQ(x, y), LEQ(y, x))],
             qid="leq_antisym",
         ),
         ForAll(
@@ -359,14 +360,23 @@ def order_theory(solver: z3.Solver) -> None:
         ForAll([x, y], LEQ(y, JOIN(x, y)), qid="leq_join_right"),
         ForAll(
             [x, y, z],
-            Implies(LEQ(x, z), Implies(LEQ(y, z), LEQ(JOIN(x, y), z))),
-            patterns=[MultiPattern(LEQ(x, z), LEQ(y, z), JOIN(x, y))],
+            And(LEQ(x, z), LEQ(y, z)) == LEQ(JOIN(x, y), z),
             qid="join_lub",
         ),  # Least upper bound property
         # JOIN is associative, commutative, and idempotent
         ForAll([x, y], JOIN(x, y) == JOIN(y, x), qid="join_commute"),
         ForAll([x, y, z], JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), z), qid="join_assoc"),
         ForAll([x], JOIN(x, x) == x, qid="join_idem"),
+        # Distributivity
+        ForAll(
+            [x, y, z],
+            JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), JOIN(x, z)),
+            patterns=[
+                MultiPattern(JOIN(x, JOIN(y, z)), JOIN(x, y), JOIN(x, z)),
+                MultiPattern(JOIN(y, z), JOIN(JOIN(x, y), JOIN(x, z))),
+            ],
+            qid="join_dist",
+        ),
         # JOIN with BOT/TOP
         ForAll([x], JOIN(x, BOT) == x, qid="join_bot"),  # BOT is identity
         ForAll([x], JOIN(x, TOP) == TOP, qid="join_top"),  # TOP absorbs
