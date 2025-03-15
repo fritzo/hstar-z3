@@ -624,3 +624,53 @@ def try_prove(
         if result == z3.unknown:
             return None, None
         raise ValueError(f"Z3 returned unexpected result: {result}")
+
+
+def find_counterexample(
+    solver: z3.Solver,
+    formula: z3.ExprRef,
+    input_var: z3.ExprRef,
+    *,
+    timeout_ms: int = 1000,
+) -> tuple[bool | None, z3.ExprRef | None]:
+    """
+    Try to prove a formula is valid. If it is not valid,
+    return a counterexample for the input variable.
+
+    Args:
+        solver: Z3 solver to use
+        formula: Formula to check validity of (should be a ForAll quantified formula)
+        input_var: The input variable to extract a counterexample for
+        timeout_ms: Maximum time to spend on the check
+
+    Returns:
+        Tuple of:
+        - True if formula proved valid
+        - False if formula proved invalid
+        - None if unknown
+        And the counterexample value (if formula is invalid)
+    """
+    counter["find_counterexample"] += 1
+    with solver, solver_timeout(solver, timeout_ms=timeout_ms):
+        # Negate the formula to find a counterexample
+        solver.add(z3.Not(formula))
+        result = solver.check()
+
+        if result == z3.unsat:
+            # Formula is valid (no counterexample exists)
+            return True, None
+        elif result == z3.sat:
+            # Formula is invalid, extract counterexample
+            model = solver.model()
+            assert model is not None, "Got sat result but no model!"
+
+            # Find the value of the input variable in the model
+            # This is the counterexample
+            for d in model.decls():
+                if d.name() == input_var.decl().name():
+                    counterexample = model[d]
+                    return False, counterexample
+            raise ValueError("Input variable not found in model!")
+        else:
+            assert result == z3.unknown
+            return None, None

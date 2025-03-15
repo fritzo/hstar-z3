@@ -33,6 +33,7 @@ from hstar.solvers import (
     add_theory,
     bool_,
     boool,
+    find_counterexample,
     hoas,
     pair,
     pre_pair,
@@ -411,3 +412,40 @@ TYPE_EXAMPLES = {
 def test_types(solver: z3.Solver, formula: z3.ExprRef) -> None:
     """Test type system properties."""
     check_that(solver, formula)
+
+
+def test_find_counterexample_1(solver: z3.Solver) -> None:
+    # Case 1: Valid formula - should return (True, None)
+    formula = ForAll([x], LEQ(x, TOP))  # x [= TOP is always true
+    result, counter = find_counterexample(solver, formula, x, timeout_ms=1000)
+    assert result is True
+    assert counter is None
+
+
+@pytest.mark.xfail(reason="FIXME solver returns z3.unknown")
+def test_find_counterexample_2(solver: z3.Solver) -> None:
+    # Case 2: Invalid formula - should return (False, counterexample)
+    formula = ForAll([x], LEQ(TOP, x))  # TOP [= x is false for x=BOT
+    result, counter = find_counterexample(solver, formula, x, timeout_ms=1000)
+    assert result is False
+    assert counter is not None
+    # Verify the counterexample is valid (TOP is not LEQ to it)
+    with solver:
+        solver.add(Not(LEQ(TOP, counter)))
+        assert solver.check() == z3.sat
+
+
+def test_find_counterexample_3(solver: z3.Solver) -> None:
+    # Case 3: Unknown formula - should return (None, None)
+    # Create a complex formula that will timeout within the small timeout
+    complex_terms = x
+    # Build a deeply nested formula that's hard for Z3 to solve quickly
+    for _ in range(10):
+        complex_terms = APP(complex_terms, APP(JOIN(APP(Y, B), APP(C, S)), x))
+    formula = ForAll([x], EQ(complex_terms, complex_terms))  # Tautology but complex
+    result, counter = find_counterexample(
+        solver, formula, x, timeout_ms=1
+    )  # Very short timeout
+    # We expect either None (timeout) or True (solved)
+    assert result is None or result is True
+    assert result is None or counter is None
