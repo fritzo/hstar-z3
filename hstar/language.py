@@ -7,12 +7,18 @@ and binary `JOIN` operation wrt the Scott ordering.
 """
 
 import inspect
-from collections.abc import Callable
+import itertools
+import logging
+from collections.abc import Callable, Iterator
 
 import z3
 from z3 import ExprRef, Not
 
+from hstar.itertools import iter_subsets
+
 from .functools import weak_key_cache
+
+logger = logging.getLogger(__name__)
 
 # Term sort
 Term = z3.DeclareSort("Term")
@@ -69,15 +75,15 @@ def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
     otherwise returns an unevaluated SHIFT call.
     """
     # Handle special constants first
-    if term == TOP:
-        return TOP
-    elif term == BOT:
-        return BOT
-
-    # Check if we have a symbolic variable (like a, x, etc.)
-    if z3.is_const(term) and term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
-        # This is a symbolic variable, just return unevaluated SHIFT
-        return SHIFT(term, z3.IntVal(start))
+    if z3.is_const(term):
+        if term == TOP:
+            return TOP
+        elif term == BOT:
+            return BOT
+        # Check if we have a symbolic variable (like a, x, etc.)
+        if term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+            # This is a symbolic variable, just return unevaluated SHIFT
+            return SHIFT(term, z3.IntVal(start))
 
     try:
         # Use Z3's application inspection functions directly
@@ -111,9 +117,12 @@ def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
                 lhs = term.arg(0)
                 rhs = term.arg(1)
                 return COMP(shift(lhs, start, delta), shift(rhs, start, delta))
+            elif z3.is_eq(term):
+                lhs, rhs = term.children()
+                return shift(lhs, start, delta) == shift(rhs, start, delta)
     except Exception as e:
         # If we encounter any exception, log it and return unevaluated SHIFT
-        print(f"Exception in shift: {e}")
+        logger.warning(f"Exception in shift: {e}")
         pass
 
     # Fall back to unevaluated SHIFT for any other expressions
@@ -203,15 +212,15 @@ def subst(i: int, replacement: ExprRef, term: ExprRef) -> ExprRef:
     idx = z3.IntVal(i)
 
     # Handle special constants first
-    if term == TOP:
-        return TOP
-    elif term == BOT:
-        return BOT
-
-    # Check if we have a symbolic variable (like a, x, etc.)
-    if z3.is_const(term) and term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
-        # This is a symbolic variable, just return unevaluated SUBST
-        return SUBST(idx, replacement, term)
+    if z3.is_const(term):
+        if term == TOP:
+            return TOP
+        elif term == BOT:
+            return BOT
+        # Check if we have a symbolic variable (like a, x, etc.)
+        if term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+            # This is a symbolic variable, just return unevaluated SUBST
+            return SUBST(idx, replacement, term)
 
     try:
         # Use Z3's application inspection functions directly
@@ -248,6 +257,9 @@ def subst(i: int, replacement: ExprRef, term: ExprRef) -> ExprRef:
                 lhs = term.arg(0)
                 rhs = term.arg(1)
                 return COMP(subst(i, replacement, lhs), subst(i, replacement, rhs))
+            elif z3.is_eq(term):
+                lhs, rhs = term.children()
+                return subst(i, replacement, lhs) == subst(i, replacement, rhs)
     except Exception as e:
         # If we encounter any exception, log it and return unevaluated SUBST
         print(f"Exception in subst: {e}")
@@ -269,13 +281,16 @@ def free_vars(term: ExprRef) -> frozenset[int]:
             i: int = term.arg(0).as_long()
             return frozenset([i])
         if decl_name == "ABS":
-            return frozenset(i + 1 for i in free_vars(term.arg(0)))
+            return frozenset(i - 1 for i in free_vars(term.arg(0)) if i)
         if decl_name == "APP" or decl_name == "JOIN" or decl_name == "COMP":
             return free_vars(term.arg(0)) | free_vars(term.arg(1))
-    raise ValueError(f"Unknown term: {term}")
+        if z3.is_eq(term):
+            lhs, rhs = term.children()
+            return free_vars(lhs) | free_vars(rhs)
+    raise TypeError(f"Unknown term: {term}")
 
 
-def abstract(term: ExprRef) -> ExprRef:
+def abstract(term: ExprRef, i: int = 0) -> ExprRef:
     """
     A Curry-style combinatory abstraction algorithm.
 
@@ -286,8 +301,15 @@ def abstract(term: ExprRef) -> ExprRef:
     Warning: this assumes the VAR in question never appears inside an ABS. It is
     ok if ABS appears in term, but only in closed subterms.
     """
+    # Reduce to case i == 0.
+    assert i >= 0
+    if i != 0:
+        term = shift(term, delta=1)  # [a, b, i, x, y] -> [a, b, i, x, y, _]
+        term = subst(i, VAR(0), term)  # [a, b, i, x, y, _] -> [a, b, _, x, y, i]
+        term = shift(term, start=i, delta=-1)  # [a, b, _, x, y, i] -> [a, b, x, y, i]
+
     # Handle expressions that don't contain VAR(0) directly
-    if not has_var_0(term):
+    if not _has_v0(term):
         # K abstraction
         return APP(K, shift(term, delta=-1))
 
@@ -302,18 +324,18 @@ def abstract(term: ExprRef) -> ExprRef:
         if decl_name == "APP":
             # I,K,C,S,W,COMP,eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
-            if has_var_0(lhs):
+            if _has_v0(lhs):
                 lhs_abs = abstract(lhs)
-                if has_var_0(rhs):
-                    if is_var_0(rhs):  # rhs is exactly VAR(0)
+                if _has_v0(rhs):
+                    if _is_v0(rhs):  # rhs is exactly VAR(0)
                         return APP(W, lhs_abs)
                     else:
                         return APP(APP(S, lhs_abs), abstract(rhs))
                 else:
                     return APP(APP(C, lhs_abs), shift(rhs, delta=-1))
             else:
-                assert has_var_0(rhs)
-                if is_var_0(rhs):  # rhs is exactly VAR(0)
+                assert _has_v0(rhs)
+                if _is_v0(rhs):  # rhs is exactly VAR(0)
                     return shift(lhs, delta=-1)
                 else:
                     return COMP(shift(lhs, delta=-1), abstract(rhs))
@@ -321,18 +343,18 @@ def abstract(term: ExprRef) -> ExprRef:
         elif decl_name == "COMP":
             # K,B,CB,C,S,COMP,eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
-            if has_var_0(lhs):
+            if _has_v0(lhs):
                 lhs_abs = abstract(lhs)
-                if has_var_0(rhs):
+                if _has_v0(rhs):
                     return APP(APP(S, COMP(B, lhs_abs)), abstract(rhs))
                 else:
-                    if is_var_0(lhs):
+                    if _is_v0(lhs):
                         return APP(CB, shift(rhs, delta=-1))
                     else:
                         return COMP(APP(CB, shift(rhs, delta=-1)), lhs_abs)
             else:
-                assert has_var_0(rhs)
-                if is_var_0(rhs):
+                assert _has_v0(rhs)
+                if _is_v0(rhs):
                     return APP(B, shift(lhs, delta=-1))
                 else:
                     return COMP(APP(B, shift(lhs, delta=-1)), abstract(rhs))
@@ -340,31 +362,118 @@ def abstract(term: ExprRef) -> ExprRef:
         elif decl_name == "JOIN":
             # K-compose-eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
-            if has_var_0(lhs):
-                if has_var_0(rhs):
+            if _has_v0(lhs):
+                if _has_v0(rhs):
                     return JOIN(abstract(lhs), abstract(rhs))
-                elif is_var_0(lhs):
+                elif _is_v0(lhs):
                     return APP(J, shift(rhs, delta=-1))
                 else:
                     return COMP(APP(J, shift(rhs, delta=-1)), abstract(lhs))
             else:
-                assert has_var_0(rhs)
-                if is_var_0(rhs):
+                assert _has_v0(rhs)
+                if _is_v0(rhs):
                     return APP(J, shift(lhs, delta=-1))
                 else:
                     return COMP(APP(J, shift(lhs, delta=-1)), abstract(rhs))
 
+        elif z3.is_eq(term):
+            lhs, rhs = term.children()
+            return abstract(lhs) == abstract(rhs)
+
     raise ValueError(f"Unsupported term: {term}")
 
 
-def has_var_0(term: ExprRef) -> bool:
+def _has_v0(term: ExprRef) -> bool:
     """Check if VAR(0) appears in a term."""
     return 0 in free_vars(term)
 
 
-def is_var_0(term: ExprRef) -> bool:
+def _is_v0(term: ExprRef) -> bool:
     """Check if a term is exactly VAR(0)."""
     if z3.is_app(term) and str(term.decl()) == "VAR":
         i: int = term.arg(0).as_long()
         return i == 0
     return False
+
+
+def iter_eta_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
+    """
+    Iterate over Hindley-style substitutions:
+        [x/x], [x/a], [x/APP x a] (and maybe [x/COMP x a])
+    """
+    varlist = sorted(free_vars(expr))
+    assert varlist
+    fresh = next(i for i in itertools.count() if i not in varlist)
+    for cases in itertools.product(range(3), repeat=len(varlist)):
+        result = expr
+        for var, case in zip(varlist, cases, strict=False):
+            if case == 0:
+                pass  # do nothing
+            elif case == 1:
+                result = subst(var, VAR(fresh), result)
+            elif case == 2:
+                result = subst(var, APP(VAR(var), VAR(fresh)), result)
+            # elif case == 3:
+            #    result = subst(var, COMP(VAR(var), VAR(fresh)), result)
+        if any(cases):
+            yield abstract(result, fresh)
+        else:
+            yield result
+
+
+def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
+    """Iterate over all closing abstractions, including variable
+    coincidence."""
+    if not free_vars(expr):
+        yield expr
+        return
+    for group in iter_subsets(free_vars(expr)):
+        if not group:
+            continue
+        var = min(group)
+        abstracted = expr
+        for other in group - {var}:
+            abstracted = subst(other, VAR(var), abstracted)
+        abstracted = abstract(abstracted, var)
+        assert len(free_vars(abstracted)) < len(free_vars(expr))
+        yield from iter_closure_maps(abstracted)
+
+
+def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
+    assert expr.is_eq(), expr
+    if not free_vars(expr):
+        yield expr
+        return
+    for expr2 in iter_eta_substitutions(expr):
+        assert expr2.is_eq(), expr2
+        for expr3 in iter_closure_maps(expr2):
+            assert expr3.is_eq(), expr3
+            yield expr3
+
+
+def ForAllHindley(vs: list[ExprRef], body: ExprRef) -> Iterator[ExprRef]:
+    """
+    Universally quantifies over all free de Bruijn variables in a formula, then
+    eliminates the quantifiers using Hindley's extensionality trick [1] and a
+    Curry-style combinatory abstraction algorithm.
+
+    Warning: none of the vs may appear inside ABS(-) terms.
+
+    [1] Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
+    """
+    assert not free_vars(body)
+    if not vs:
+        yield body
+        return
+
+    # Convert nominal variables to de Bruijn indices
+    for i, v in enumerate(reversed(vs)):
+        body = z3.substitute(body, (v, VAR(i)))
+
+    # Eliminate quantifiers
+    for derived in iter_closures(body):
+        assert z3.is_eq(derived)
+        lhs, rhs = derived.children()
+        if z3.eq(lhs, rhs):
+            continue  # Skip trivial equalities.
+        yield derived
