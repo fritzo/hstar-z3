@@ -554,12 +554,12 @@ def _is_normal(term: _Term) -> bool:
         return True
     if term.typ == TermType.ABS:
         assert term.head is not None
-        if term.head.typ == TermType.ABS:
-            return False  # unreduced beta redex
         return _is_normal(term.head)
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
+        if term.head.typ == TermType.ABS:
+            return False  # unreduced beta redex
         return _is_normal(term.head) and is_normal(term.body)
     raise ValueError(f"unexpected term type: {term.typ}")
 
@@ -568,3 +568,41 @@ def _is_normal(term: _Term) -> bool:
 def is_normal(term: Term) -> bool:
     """Returns whether a term is in beta normal form."""
     return all(map(_is_normal, term.parts))
+
+
+@weak_key_cache
+def _approximate(term: _Term) -> Term:
+    """
+    Approximates a term by replacing nonlinear beta redexes APP(ABS(-),-) with
+    APP(ABS(-),BOT).
+    """
+    if term.typ == TermType.TOP:
+        return TOP
+    if term.typ == TermType.VAR:
+        return _JOIN(term)
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return ABS(_approximate(term.head))
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        # Approximate bottom-up
+        head = _approximate(term.head)
+        body = approximate(term.body)
+        if head is not _JOIN(term.head) or body is not term.body:
+            return approximate(APP(head, body))
+        # Check for beta redex
+        _head = next(iter(head.parts))
+        if _head.typ == TermType.ABS:
+            # Replace APP(ABS(-),-) with APP(ABS(-),BOT)
+            assert _head.head is not None
+            assert _head.head.free_vars.get(0, 0) > 1
+            return approximate(_APP(_head, BOT))
+        return _JOIN(term)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@weak_key_cache
+def approximate(term: Term) -> Term:
+    """Approximates a term by replacing APP(ABS(-),-) nodes with APP(ABS(-),BOT)."""
+    return JOIN(*(_approximate(part) for part in term.parts))

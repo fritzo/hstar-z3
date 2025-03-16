@@ -1,7 +1,9 @@
 import logging
 
+import pytest
 from immutables import Map
 
+from hstar.enumeration import enumerator
 from hstar.normal import (
     ABS,
     APP,
@@ -12,8 +14,10 @@ from hstar.normal import (
     Env,
     TermType,
     _Term,
+    approximate,
     complexity,
     env_compose,
+    is_normal,
     shift,
     subst,
 )
@@ -278,3 +282,19 @@ def test_env_compose() -> None:
     rhs_result = subst(subst(complex_term, env_c), env_d)
 
     assert lhs_result is rhs_result
+
+
+def test_approximate() -> None:
+    quota = 20  # test at least a few non-normal terms
+    for total, term in enumerate(enumerator):
+        actual = approximate(term)
+        if is_normal(term):
+            assert actual is term
+        else:
+            assert is_normal(actual)
+            logger.info(f"Approximated term {term} -> {actual}")
+            quota -= 1
+        if not quota:
+            logger.info(f"Approximated {1 + total} terms")
+            return
+    pytest.fail("Ran out of terms to approximate")
