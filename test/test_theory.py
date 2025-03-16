@@ -52,9 +52,12 @@ v2 = VAR(2)
 @pytest.fixture(scope="module")
 def base_solver() -> z3.Solver:
     """Create a solver with the basic theories that all tests will need."""
-    s = z3.Solver()
-    add_theory(s)
-    return s
+    solver = z3.Solver()
+    # Enable unsat core generation
+    solver.set("unsat_core", True)
+    solver.set("proof", True)
+    add_theory(solver)
+    return solver
 
 
 @pytest.fixture
@@ -67,7 +70,6 @@ def solver(base_solver: z3.Solver) -> Iterator[z3.Solver]:
 def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     with solver, solver_timeout(solver, timeout_ms=1000):
-        solver.set("unsat_core", True)
         result = solver.check()
         if result == z3.unsat:
             core = solver.unsat_core()  # FIXME sometimes core is empty

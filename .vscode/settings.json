@@ -3,7 +3,11 @@
   "python.linting.enabled": false,
   "cSpell.words": [
     "boool",
+    "Hindley",
     "hstar",
-    "redex"
+    "mbqi",
+    "redex",
+    "Satisfiability",
+    "unsat"
   ]
 }

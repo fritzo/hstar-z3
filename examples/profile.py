@@ -21,6 +21,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP = os.path.join(ROOT, "tmp")
 
 
+def add_custom(solver: z3.Solver) -> None:
+    from hstar.language import BOT, LEQ, TUPLE, Term
+
+    x = z3.Const("x", Term)
+    solver.add(LEQ(TUPLE(BOT), TUPLE(x)))
+
+
 def main(args: argparse.Namespace) -> None:
     # Create directory for trace file if needed
     if not os.path.exists(os.path.dirname(args.trace_file)):
@@ -36,7 +43,6 @@ def main(args: argparse.Namespace) -> None:
     # Set up solver
     solver = z3.Solver()
     solver.set("timeout", args.timeout_ms)
-    solver.set("unsat_core", True)
 
     # Set default solver parameters for better profiling
     solver.set("relevancy", 2)  # More precise relevancy propagation
@@ -67,6 +73,7 @@ def main(args: argparse.Namespace) -> None:
 
     start = time.time()
     add_theory(solver)
+    add_custom(solver)
     theory_time = time.time() - start
     logger.info(f"Theory added in {theory_time:.2f}s")
 
@@ -86,7 +93,6 @@ def main(args: argparse.Namespace) -> None:
             cmd.append("proof=true")
             cmd.append("trace=true")
             cmd.append(f"trace-file-name={args.trace_file}")
-        cmd.append("unsat_core=true")
         cmd.append(smt2_path)
         logger.info(f"Running Z3 with command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -102,7 +108,7 @@ def main(args: argparse.Namespace) -> None:
     else:
         result = solver.check()
         if result == z3.unsat:
-            logger.error(f"Unsat core:\n{solver.unsat_core()}")
+            logger.error("Unsatisfiable")
         elif result == z3.sat:
             logger.info("Satisfiable")
         else:
