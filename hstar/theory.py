@@ -173,7 +173,15 @@ def order_theory(solver: z3.Solver) -> None:
         ),  # Least upper bound property
         # JOIN is associative, commutative, and idempotent
         ForAll([x, y], JOIN(x, y) == JOIN(y, x), qid="join_commute"),
-        ForAll([x, y, z], JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), z), qid="join_assoc"),
+        ForAll(
+            [x, y, z],
+            JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), z),
+            patterns=[
+                MultiPattern(JOIN(x, JOIN(y, z)), JOIN(x, y)),
+                MultiPattern(JOIN(y, z), JOIN(JOIN(x, y), z)),
+            ],
+            qid="join_assoc",
+        ),
         ForAll([x], JOIN(x, x) == x, qid="join_idem"),
         # Distributivity
         ForAll(
@@ -223,11 +231,19 @@ def lambda_theory(solver: z3.Solver) -> None:
         ForAll(
             [f, g, h],
             Implies(LEQ(f, g), LEQ(COMP(f, h), COMP(g, h))),
+            patterns=[
+                MultiPattern(LEQ(f, g), COMP(f, h), COMP(g, h)),
+                LEQ(COMP(f, h), COMP(g, h)),
+            ],
             qid="comp_mono_left",
         ),
         ForAll(
             [f, g, h],
             Implies(LEQ(g, h), LEQ(COMP(f, g), COMP(f, h))),
+            patterns=[
+                MultiPattern(LEQ(g, h), COMP(f, g), COMP(f, h)),
+                LEQ(COMP(f, g), COMP(f, h)),
+            ],
             qid="comp_mono_right",
         ),
         # Combinator equations
@@ -544,7 +560,7 @@ def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
     lambda_theory(solver)
     if include_slow:
         extensional_theory(solver)
-    hindley_theory(solver)
+        hindley_theory(solver)
     simple_theory(solver)
     closure_theory(solver)
     if include_slow:
