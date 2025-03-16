@@ -9,6 +9,7 @@ The theory includes de Bruijn syntax, Scott ordering, lambda calculus, and
 a types-as-closures.
 """
 
+import logging
 from collections.abc import Iterator
 
 import z3
@@ -19,6 +20,7 @@ from .language import (
     APP,
     BOT,
     CB,
+    CI,
     COMP,
     DIV,
     JOIN,
@@ -34,6 +36,7 @@ from .language import (
     Y_,
     B,
     C,
+    ForAllHindley,
     I,
     J,
     K,
@@ -50,6 +53,7 @@ from .language import (
 )
 from .metrics import COUNTERS
 
+logger = logging.getLogger(__name__)
 counter = COUNTERS[__name__]
 
 v0 = VAR(0)
@@ -61,6 +65,7 @@ x, y, z = z3.Consts("x y z", Term)
 
 def de_bruijn_theory(solver: z3.Solver) -> None:
     """Theory of de Bruijn operations SHIFT and SUBST."""
+    logger.info("Adding de Bruijn theory")
     i = z3.Int("i")
     j = z3.Int("j")
     body = z3.Const("body", Term)
@@ -135,6 +140,7 @@ def de_bruijn_theory(solver: z3.Solver) -> None:
 
 # Theory of Scott ordering.
 def order_theory(solver: z3.Solver) -> None:
+    logger.info("Adding Scott order theory")
     solver.add(
         # Basic order axioms
         ForAll([x], LEQ(x, TOP), qid="leq_top"),
@@ -182,6 +188,7 @@ def order_theory(solver: z3.Solver) -> None:
 
 # Theory of lambda calculus.
 def lambda_theory(solver: z3.Solver) -> None:
+    logger.info("Adding lambda theory")
     solver.add(
         # Composition properties
         ForAll(
@@ -221,6 +228,7 @@ def lambda_theory(solver: z3.Solver) -> None:
         # Combinator equations
         KI == app(K, I),
         CB == app(C, B),
+        CI == app(C, I),
         J == app(C, J),
         I == app(W, J),
         Y == Y_,
@@ -273,6 +281,15 @@ def lambda_theory(solver: z3.Solver) -> None:
                 MultiPattern(app(C, x, y), app(x, z, y)),
             ],
             qid="beta_c",
+        ),
+        ForAll(
+            [x, y],
+            app(CI, x, y) == app(y, x),
+            patterns=[
+                MultiPattern(app(CI, x, y)),
+                MultiPattern(app(CI, x), app(y, x)),
+            ],
+            qid="beta_ci",
         ),
         ForAll(
             [x, y],
@@ -370,9 +387,10 @@ def lambda_theory(solver: z3.Solver) -> None:
     )
 
 
-def extensionality_theory(solver: z3.Solver) -> None:
-    # FIXME these hang.
-    return
+# FIXME this theory hangs.
+def extensional_theory(solver: z3.Solver) -> None:
+    """Extensionality axioms of lambda calculus."""
+    logger.info("Adding extensional theory")
     solver.add(
         # Extensionality
         ForAll(
@@ -388,8 +406,35 @@ def extensionality_theory(solver: z3.Solver) -> None:
     )
 
 
+def hindley_theory(solver: z3.Solver) -> None:
+    """
+    Hindley-style quantifier free equations for extensionality.
+
+    1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
+    """
+    logger.info("Adding Hindley theory")
+    axioms = [
+        *ForAllHindley([x], app(TOP, x) == TOP),
+        *ForAllHindley([x], app(BOT, x) == BOT),
+        *ForAllHindley([x], app(I, x) == x),
+        *ForAllHindley([x, y], app(K, x, y) == x),
+        *ForAllHindley([x, y], app(KI, x, y) == y),
+        *ForAllHindley([x, y], app(J, x, y) == JOIN(x, y)),
+        *ForAllHindley([x, y], app(CI, x, y) == app(y, x)),
+        *ForAllHindley([x, y], app(W, x, y) == app(x, y, y)),
+        *ForAllHindley([x, y, z], app(B, x, y, z) == app(x, app(y, z))),
+        *ForAllHindley([x, y, z], app(C, x, y, z) == app(x, z, y)),
+        *ForAllHindley([x, y, z], app(CB, x, y, z) == app(y, app(x, z))),
+        *ForAllHindley([x, y, z], app(S, x, y, z) == app(x, z, app(y, z))),
+        *ForAllHindley([f], app(Y, f) == app(f, app(Y, f))),
+    ]
+    logger.info(f"Generated {len(axioms)} Hindley equations")
+    solver.add(*axioms)
+
+
 def simple_theory(solver: z3.Solver) -> None:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
+    logger.info("Adding simple type theory")
 
     def above_all_sr(candidate: z3.ExprRef) -> z3.ExprRef:
         s1, r1 = z3.Consts("s1 r1", Term)  # Different names for bound variables
@@ -423,6 +468,7 @@ def simple_theory(solver: z3.Solver) -> None:
 
 def closure_theory(solver: z3.Solver) -> None:
     """Theory of types and type membership."""
+    logger.info("Adding closure theory")
     solver.add(
         # # Types are closures.
         ForAll([t], LEQ(I, APP(V, t)), qid="v_id"),
@@ -455,6 +501,8 @@ def declare_type(
 
 
 def types_theory(solver: z3.Solver) -> None:
+    """Theory of concrete types."""
+    logger.info("Adding types theory")
     solver.add(
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
@@ -464,13 +512,17 @@ def types_theory(solver: z3.Solver) -> None:
     )
 
 
-def add_theory(solver: z3.Solver, types: bool = False) -> None:
+def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
+    """Add all theories to the solver."""
     counter["add_theory"] += 1
     de_bruijn_theory(solver)
     order_theory(solver)
     lambda_theory(solver)
-    extensionality_theory(solver)
+    if include_slow:
+        extensional_theory(solver)
+        hindley_theory(solver)
     simple_theory(solver)
     closure_theory(solver)
-    if types:
+    if include_slow:
         types_theory(solver)
+    logger.info(f"Solver statistics:\n{solver.statistics()}")

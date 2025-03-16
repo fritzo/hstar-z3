@@ -16,6 +16,7 @@ from hstar.language import (
     VAR,
     B,
     C,
+    ForAllHindley,
     I,
     J,
     K,
@@ -24,6 +25,7 @@ from hstar.language import (
     W,
     Y,
     abstract,
+    app,
     free_vars,
     hoas,
     iter_closure_maps,
@@ -225,11 +227,7 @@ def test_iter_eta_substitutions() -> None:
 CLOSURE_MAPS_EXAMPLES = [
     (v0, {I}),
     (APP(v0, v0), {APP(W, I)}),
-    pytest.param(
-        APP(v0, v1),
-        {I, APP(C, I), APP(W, I)},
-        marks=[pytest.mark.xfail(reason="FIXME missing I")],
-    ),
+    (APP(v0, v1), {I, APP(C, I), APP(W, I)}),
 ]
 
 
@@ -241,3 +239,14 @@ CLOSURE_MAPS_EXAMPLES = [
 def test_iter_closure_maps(term: z3.ExprRef, expected: set[z3.ExprRef]) -> None:
     actual = set(iter_closure_maps(term))
     assert actual == expected
+
+
+def test_forall_hindley() -> None:
+    actual = set(ForAllHindley([x], app(I, x) == x))
+    assert len(actual) == 1
+
+    actual = set(ForAllHindley([x, y], app(K, x, y) == x))
+    assert len(actual) == 13
+
+    actual = set(ForAllHindley([x, y, z], app(B, x, y, z) == x))
+    assert len(actual) == 134

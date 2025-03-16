@@ -6,6 +6,7 @@ This uses a de Bruijn indexed representation of λ-join-calculus terms, with a
 and binary `JOIN` operation wrt the Scott ordering.
 """
 
+import functools
 import inspect
 import itertools
 import logging
@@ -15,8 +16,6 @@ import z3
 from z3 import ExprRef, Not
 
 from hstar.itertools import iter_subsets
-
-from .functools import weak_key_cache
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +47,9 @@ K = ABS(ABS(VAR(1)))
 KI = ABS(ABS(VAR(0)))
 J = JOIN(K, KI)
 B = ABS(ABS(ABS(APP(v2, APP(v1, v0)))))
-CB = ABS(ABS(ABS(APP(v2, APP(v0, v1)))))
 C = ABS(ABS(ABS(APP(APP(v2, v0), v1))))
+CI = ABS(ABS(APP(v1, v0)))
+CB = ABS(ABS(ABS(APP(v2, APP(v0, v1)))))
 W = ABS(ABS(APP(APP(v1, v0), v0)))
 S = ABS(ABS(ABS(APP(APP(v2, v0), APP(v1, v0)))))
 Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
@@ -64,6 +64,7 @@ def CONV(term: ExprRef) -> ExprRef:
     return Not(LEQ(term, BOT))
 
 
+@functools.lru_cache
 def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
     """
     Shift free variables in a term by delta, starting from index `start`.
@@ -203,6 +204,7 @@ def OFTYPE(x: ExprRef, t: ExprRef) -> ExprRef:
     return LEQ(APP(t, x), x)
 
 
+@functools.lru_cache
 def subst(i: int, replacement: ExprRef, term: ExprRef) -> ExprRef:
     """
     Substitute a term for a variable in another term.
@@ -269,7 +271,7 @@ def subst(i: int, replacement: ExprRef, term: ExprRef) -> ExprRef:
     return SUBST(idx, replacement, term)
 
 
-@weak_key_cache
+@functools.lru_cache
 def free_vars(term: ExprRef) -> frozenset[int]:
     """Return the set of de Bruijn VARs of free variables in a term."""
     if z3.is_const(term) and term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
@@ -304,11 +306,22 @@ def abstract(term: ExprRef, i: int = 0) -> ExprRef:
     # Reduce to case i == 0.
     assert i >= 0
     if i != 0:
-        term = shift(term, delta=1)  # [a, b, i, x, y] -> [a, b, i, x, y, _]
+        if 0 in free_vars(term):
+            term = shift(term, delta=1)  # [a, b, i, x, y] -> [a, b, i, x, y, _]
+            i += 1
         term = subst(i, VAR(0), term)  # [a, b, i, x, y, _] -> [a, b, _, x, y, i]
         term = shift(term, start=i, delta=-1)  # [a, b, _, x, y, i] -> [a, b, x, y, i]
 
-    # Handle expressions that don't contain VAR(0) directly
+    if z3.is_eq(term):
+        lhs, rhs = term.children()
+        return _abstract(lhs) == _abstract(rhs)
+
+    return _abstract(term)
+
+
+@functools.lru_cache
+def _abstract(term: ExprRef) -> ExprRef:
+    # Handle terms that don't contain VAR(0) directly
     if not _has_v0(term):
         # K abstraction
         return APP(K, shift(term, delta=-1))
@@ -325,12 +338,12 @@ def abstract(term: ExprRef, i: int = 0) -> ExprRef:
             # I,K,C,S,W,COMP,eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
             if _has_v0(lhs):
-                lhs_abs = abstract(lhs)
+                lhs_abs = _abstract(lhs)
                 if _has_v0(rhs):
                     if _is_v0(rhs):  # rhs is exactly VAR(0)
                         return APP(W, lhs_abs)
                     else:
-                        return APP(APP(S, lhs_abs), abstract(rhs))
+                        return APP(APP(S, lhs_abs), _abstract(rhs))
                 else:
                     return APP(APP(C, lhs_abs), shift(rhs, delta=-1))
             else:
@@ -338,15 +351,15 @@ def abstract(term: ExprRef, i: int = 0) -> ExprRef:
                 if _is_v0(rhs):  # rhs is exactly VAR(0)
                     return shift(lhs, delta=-1)
                 else:
-                    return COMP(shift(lhs, delta=-1), abstract(rhs))
+                    return COMP(shift(lhs, delta=-1), _abstract(rhs))
 
         elif decl_name == "COMP":
             # K,B,CB,C,S,COMP,eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
             if _has_v0(lhs):
-                lhs_abs = abstract(lhs)
+                lhs_abs = _abstract(lhs)
                 if _has_v0(rhs):
-                    return APP(APP(S, COMP(B, lhs_abs)), abstract(rhs))
+                    return APP(APP(S, COMP(B, lhs_abs)), _abstract(rhs))
                 else:
                     if _is_v0(lhs):
                         return APP(CB, shift(rhs, delta=-1))
@@ -357,28 +370,24 @@ def abstract(term: ExprRef, i: int = 0) -> ExprRef:
                 if _is_v0(rhs):
                     return APP(B, shift(lhs, delta=-1))
                 else:
-                    return COMP(APP(B, shift(lhs, delta=-1)), abstract(rhs))
+                    return COMP(APP(B, shift(lhs, delta=-1)), _abstract(rhs))
 
         elif decl_name == "JOIN":
             # K-compose-eta abstraction
             lhs, rhs = term.arg(0), term.arg(1)
             if _has_v0(lhs):
                 if _has_v0(rhs):
-                    return JOIN(abstract(lhs), abstract(rhs))
+                    return JOIN(_abstract(lhs), _abstract(rhs))
                 elif _is_v0(lhs):
                     return APP(J, shift(rhs, delta=-1))
                 else:
-                    return COMP(APP(J, shift(rhs, delta=-1)), abstract(lhs))
+                    return COMP(APP(J, shift(rhs, delta=-1)), _abstract(lhs))
             else:
                 assert _has_v0(rhs)
                 if _is_v0(rhs):
                     return APP(J, shift(lhs, delta=-1))
                 else:
-                    return COMP(APP(J, shift(lhs, delta=-1)), abstract(rhs))
-
-        elif z3.is_eq(term):
-            lhs, rhs = term.children()
-            return abstract(lhs) == abstract(rhs)
+                    return COMP(APP(J, shift(lhs, delta=-1)), _abstract(rhs))
 
     raise ValueError(f"Unsupported term: {term}")
 
@@ -440,14 +449,14 @@ def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
 
 
 def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
-    assert expr.is_eq(), expr
+    assert z3.is_eq(expr), expr
     if not free_vars(expr):
         yield expr
         return
     for expr2 in iter_eta_substitutions(expr):
-        assert expr2.is_eq(), expr2
+        assert z3.is_eq(expr2), expr2
         for expr3 in iter_closure_maps(expr2):
-            assert expr3.is_eq(), expr3
+            assert z3.is_eq(expr3), expr3
             yield expr3
 
 

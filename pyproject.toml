@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "immutables",
+    "tqdm",
     "z3-solver",
 ]
 
