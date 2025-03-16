@@ -460,29 +460,53 @@ def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
             yield expr3
 
 
-def ForAllHindley(vs: list[ExprRef], body: ExprRef) -> Iterator[ExprRef]:
+def _z3_occurs_in(subexpr: ExprRef, expr: ExprRef) -> bool:
+    if z3.eq(expr, subexpr):
+        return True
+    if z3.is_app(expr):
+        return any(_z3_occurs_in(subexpr, child) for child in expr.children())
+    return False
+
+
+def forall_to_open(expr: ExprRef) -> ExprRef:
     """
-    Universally quantifies over all free de Bruijn variables in a formula, then
-    eliminates the quantifiers using Hindley's extensionality trick [1] and a
-    Curry-style combinatory abstraction algorithm.
+    Convert a z3.ForAll formula into an open formula with free VARs.
+
+    Warning: none of the vs may appear inside ABS(-) terms.
+    """
+    assert expr.is_forall()
+    body = expr.body()
+    assert z3.is_eq(body)
+
+    # Note z3 abstracts in reverse order.
+    fv: list[ExprRef] = []
+    for i in itertools.count():
+        var = z3.Var(i, Term)
+        if not _z3_occurs_in(var, body):
+            break
+        fv.append(var)
+    for i, var in enumerate(reversed(fv)):
+        body = z3.substitute(body, (var, VAR(i)))
+    return body
+
+
+def QEHindley(expr: ExprRef) -> set[ExprRef]:
+    """
+    Converts a z3.ForAll formula into a set of closed formulas.
+
+    This eliminates the quantifiers using Hindley's extensionality trick [1] and
+    a Curry-style combinatory abstraction algorithm.
 
     Warning: none of the vs may appear inside ABS(-) terms.
 
     [1] Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
-    assert not free_vars(body)
-    if not vs:
-        yield body
-        return
-
-    # Convert nominal variables to de Bruijn indices
-    for i, v in enumerate(reversed(vs)):
-        body = z3.substitute(body, (v, VAR(i)))
-
-    # Eliminate quantifiers
+    result: set[ExprRef] = set()
+    body = forall_to_open(expr)
     for derived in iter_closures(body):
         assert z3.is_eq(derived)
         lhs, rhs = derived.children()
         if z3.eq(lhs, rhs):
             continue  # Skip trivial equalities.
-        yield derived
+        result.add(derived)
+    return result

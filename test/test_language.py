@@ -3,7 +3,10 @@ from typing import Any
 
 import pytest
 import z3
+from z3 import ForAll
 
+from hstar import normal
+from hstar.bridge import z3_to_nf
 from hstar.language import (
     ABS,
     APP,
@@ -16,16 +19,17 @@ from hstar.language import (
     VAR,
     B,
     C,
-    ForAllHindley,
     I,
     J,
     K,
+    QEHindley,
     S,
     Term,
     W,
     Y,
     abstract,
     app,
+    forall_to_open,
     free_vars,
     hoas,
     iter_closure_maps,
@@ -33,6 +37,7 @@ from hstar.language import (
     shift,
     subst,
 )
+from hstar.theory import hindley_theory
 
 logger = logging.getLogger(__name__)
 
@@ -241,12 +246,56 @@ def test_iter_closure_maps(term: z3.ExprRef, expected: set[z3.ExprRef]) -> None:
     assert actual == expected
 
 
-def test_forall_hindley() -> None:
-    actual = set(ForAllHindley([x], app(I, x) == x))
+def test_qe_hindley_count() -> None:
+    actual = QEHindley(ForAll([x], app(I, x) == x))
     assert len(actual) == 1
 
-    actual = set(ForAllHindley([x, y], app(K, x, y) == x))
+    actual = QEHindley(ForAll([x, y], app(K, x, y) == x))
     assert len(actual) == 13
 
-    actual = set(ForAllHindley([x, y, z], app(B, x, y, z) == x))
+    actual = QEHindley(ForAll([x, y, z], app(B, x, y, z) == x))
     assert len(actual) == 134
+
+
+FORALL_TO_OPEN_EXAMPLES = [
+    (z3.ForAll([x], app(I, x) == x), app(I, v0) == v0),
+    (z3.ForAll([x, y], app(K, x, y) == x), app(K, v0, v1) == v0),
+    (
+        z3.ForAll([x, y, z], app(B, x, y, z) == app(x, app(y, z))),
+        app(B, v0, v1, v2) == app(v0, app(v1, v2)),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "expr, expected",
+    FORALL_TO_OPEN_EXAMPLES,
+    ids=[str(x[1]) for x in FORALL_TO_OPEN_EXAMPLES],
+)
+def test_forall_to_open(expr: z3.ExprRef, expected: z3.ExprRef) -> None:
+    actual = forall_to_open(expr)
+    assert z3.eq(actual, expected)
+
+
+HINDLEY_AXIOMS = hindley_theory()
+HINDLEY_IDS = [" ".join(str(x).split()) for x in HINDLEY_AXIOMS]
+
+
+@pytest.mark.xfail(reason="FIXME")
+@pytest.mark.parametrize("axiom", HINDLEY_AXIOMS, ids=HINDLEY_IDS)
+def test_qe_hindley(axiom: z3.ExprRef) -> None:
+    equations = list(QEHindley(axiom))
+    assert equations
+    for e in equations:
+        assert z3.is_eq(e)
+        assert not free_vars(e)
+        lhs, rhs = e.children()
+        lhs_nf = z3_to_nf(lhs)
+        rhs_nf = z3_to_nf(rhs)
+        for i in range(3):
+            if lhs_nf == normal.VAR(i):
+                break
+            var = normal.VAR(i)
+            lhs_nf = normal.app(lhs_nf, var)
+            rhs_nf = normal.app(rhs_nf, var)
+        assert lhs_nf == rhs_nf

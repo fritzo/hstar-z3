@@ -13,7 +13,7 @@ import logging
 from collections.abc import Iterator
 
 import z3
-from z3 import And, ForAll, If, Implies, MultiPattern, Not, Or
+from z3 import And, ExprRef, ForAll, If, Implies, MultiPattern, Not, Or
 
 from .language import (
     ABS,
@@ -36,10 +36,10 @@ from .language import (
     Y_,
     B,
     C,
-    ForAllHindley,
     I,
     J,
     K,
+    QEHindley,
     S,
     Term,
     V,
@@ -446,37 +446,44 @@ def extensional_theory(solver: z3.Solver) -> None:
     )
 
 
-def hindley_theory(solver: z3.Solver) -> None:
+def hindley_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
     """
     Hindley-style quantifier free equations for extensionality.
+
+    Returns the original list of universally quantified axioms.
 
     1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
     logger.info("Adding Hindley theory")
     axioms = [
-        *ForAllHindley([x], app(TOP, x) == TOP),
-        *ForAllHindley([x], app(BOT, x) == BOT),
-        *ForAllHindley([x], app(I, x) == x),
-        *ForAllHindley([x, y], app(K, x, y) == x),
-        *ForAllHindley([x, y], app(KI, x, y) == y),
-        *ForAllHindley([x, y], app(J, x, y) == JOIN(x, y)),
-        *ForAllHindley([x, y], app(CI, x, y) == app(y, x)),
-        *ForAllHindley([x, y], app(W, x, y) == app(x, y, y)),
-        *ForAllHindley([x, y, z], app(B, x, y, z) == app(x, app(y, z))),
-        *ForAllHindley([x, y, z], app(C, x, y, z) == app(x, z, y)),
-        *ForAllHindley([x, y, z], app(CB, x, y, z) == app(y, app(x, z))),
-        *ForAllHindley([x, y, z], app(S, x, y, z) == app(x, z, app(y, z))),
-        *ForAllHindley([f], app(Y, f) == app(f, app(Y, f))),
+        ForAll([x], app(TOP, x) == TOP),
+        ForAll([x], app(BOT, x) == BOT),
+        ForAll([x], app(I, x) == x),
+        ForAll([x, y], app(K, x, y) == x),
+        ForAll([x, y], app(KI, x, y) == y),
+        ForAll([x, y], app(J, x, y) == JOIN(x, y)),
+        ForAll([x, y], app(CI, x, y) == app(y, x)),
+        ForAll([x, y], app(W, x, y) == app(x, y, y)),
+        ForAll([x, y, z], app(B, x, y, z) == app(x, app(y, z))),
+        ForAll([x, y, z], app(C, x, y, z) == app(x, z, y)),
+        ForAll([x, y, z], app(CB, x, y, z) == app(y, app(x, z))),
+        ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z))),
+        ForAll([f], app(Y, f) == app(f, app(Y, f))),
     ]
+    equations: set[ExprRef] = set()
+    for axiom in axioms:
+        equations.update(QEHindley(axiom))
     logger.info(f"Generated {len(axioms)} Hindley equations")
-    solver.add(*axioms)
+    if solver is not None:
+        solver.add(*equations)
+    return axioms
 
 
 def simple_theory(solver: z3.Solver) -> None:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
     logger.info("Adding simple type theory")
 
-    def above_all_sr(candidate: z3.ExprRef) -> z3.ExprRef:
+    def above_all_sr(candidate: ExprRef) -> ExprRef:
         s1, r1 = z3.Consts("s1 r1", Term)  # Different names for bound variables
         return ForAll(
             [s1, r1],
@@ -527,9 +534,7 @@ def closure_theory(solver: z3.Solver) -> None:
     )
 
 
-def declare_type(
-    t: z3.ExprRef, inhabs: list[z3.ExprRef], *, qid: str
-) -> Iterator[z3.ExprRef]:
+def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:
     # t is a type
     yield OFTYPE(t, V)
     # t contains all its inhabitants
