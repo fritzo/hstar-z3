@@ -108,7 +108,9 @@ def main(args: argparse.Namespace) -> None:
     summarize(args.trace_file)
 
 
-parser = argparse.ArgumentParser(description=__doc__)
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+)
 parser.add_argument(
     "--subprocess",
     action="store_true",

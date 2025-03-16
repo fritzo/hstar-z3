@@ -73,64 +73,68 @@ def de_bruijn_theory(solver: z3.Solver) -> None:
     rhs = z3.Const("rhs", Term)
     start = z3.Int("start")
     solver.add(
-        # SHIFT axioms
+        # SHIFT axioms, deterministically executed forwards.
         ForAll(
             [i, start],
             SHIFT(VAR(i), start) == VAR(If(i >= start, i + 1, i)),
-            patterns=[MultiPattern(SHIFT(VAR(i), start))],
+            patterns=[SHIFT(VAR(i), start)],
             qid="shift_var",
         ),
         ForAll(
             [x, start],
             SHIFT(ABS(x), start) == ABS(SHIFT(x, start + 1)),
-            patterns=[MultiPattern(SHIFT(ABS(x), start))],
+            patterns=[SHIFT(ABS(x), start)],
             qid="shift_abs",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(APP(lhs, rhs), start) == APP(SHIFT(lhs, start), SHIFT(rhs, start)),
-            patterns=[MultiPattern(SHIFT(APP(lhs, rhs), start))],
+            patterns=[SHIFT(APP(lhs, rhs), start)],
             qid="shift_app",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(JOIN(lhs, rhs), start) == JOIN(SHIFT(lhs, start), SHIFT(rhs, start)),
-            patterns=[MultiPattern(SHIFT(JOIN(lhs, rhs), start))],
+            patterns=[SHIFT(JOIN(lhs, rhs), start)],
             qid="shift_join",
         ),
         ForAll(
             [lhs, rhs, start],
             SHIFT(COMP(lhs, rhs), start) == COMP(SHIFT(lhs, start), SHIFT(rhs, start)),
-            patterns=[MultiPattern(SHIFT(COMP(lhs, rhs), start))],
+            patterns=[SHIFT(COMP(lhs, rhs), start)],
             qid="shift_comp",
         ),
         ForAll([start], SHIFT(TOP, start) == TOP, qid="shift_top"),
         ForAll([start], SHIFT(BOT, start) == BOT, qid="shift_bot"),
-        # SUBST axioms
+        # SUBST axioms, deterministically executed forwards.
         ForAll(
             [j, i, x],
             SUBST(i, x, VAR(j)) == If(j == i, x, VAR(j)),
-            patterns=[MultiPattern(SUBST(i, x, VAR(j)))],
+            patterns=[SUBST(i, x, VAR(j))],
             qid="subst_var",
         ),
         ForAll(
             [body, i, x],
             SUBST(i, x, ABS(body)) == ABS(SUBST(i + 1, SHIFT(x, 0), body)),
+            patterns=[SUBST(i, x, ABS(body))],
             qid="subst_abs",
         ),
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, APP(lhs, rhs)) == APP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
+            patterns=[SUBST(i, x, APP(lhs, rhs))],
             qid="subst_app",
         ),
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, JOIN(lhs, rhs)) == JOIN(SUBST(i, x, lhs), SUBST(i, x, rhs)),
+            patterns=[SUBST(i, x, JOIN(lhs, rhs))],
             qid="subst_join",
         ),
         ForAll(
             [lhs, rhs, i, x],
             SUBST(i, x, COMP(lhs, rhs)) == COMP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
+            patterns=[SUBST(i, x, COMP(lhs, rhs))],
             qid="subst_comp",
         ),
         ForAll([i, x], SUBST(i, x, TOP) == TOP, qid="subst_top"),
@@ -154,7 +158,8 @@ def order_theory(solver: z3.Solver) -> None:
         ),
         ForAll(
             [x, y, z],
-            Implies(LEQ(x, y), Implies(LEQ(y, z), LEQ(x, z))),
+            Implies(And(LEQ(x, y), LEQ(y, z)), LEQ(x, z)),
+            patterns=[MultiPattern(LEQ(x, y), LEQ(y, z), LEQ(x, z))],
             qid="leq_trans",
         ),
         Not(LEQ(TOP, BOT)),
@@ -325,7 +330,13 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="y_fix",
         ),
         # Beta reduction using Z3's SUBST
-        ForAll([x, y], APP(ABS(x), y) == SUBST(0, y, x), qid="beta_app_abs"),
+        # TODO add linear beta patterns for safe substitution.
+        ForAll(
+            [x, y],
+            APP(ABS(x), y) == SUBST(0, y, x),
+            patterns=[MultiPattern(APP(ABS(x), y), SUBST(0, y, x))],
+            qid="beta_app_abs",
+        ),
         # APP-JOIN distributivity (both directions)
         ForAll(
             [f, g, x],
@@ -365,8 +376,21 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="app_mono_arg",
         ),
         # ABS monotonicity
-        ForAll([x, y], (ABS(x) == ABS(y)) == (x == y), qid="abs_inj"),
-        ForAll([x, y], LEQ(x, y) == LEQ(ABS(x), ABS(y)), qid="abs_mono"),
+        ForAll(
+            [x, y],
+            (ABS(x) == ABS(y)) == (x == y),
+            patterns=[
+                ABS(x) == ABS(y),
+                MultiPattern(ABS(x), ABS(y), x == y),
+            ],
+            qid="abs_inj",
+        ),
+        ForAll(
+            [x, y],
+            LEQ(x, y) == LEQ(ABS(x), ABS(y)),
+            patterns=[MultiPattern(LEQ(x, y), ABS(x), ABS(y))],
+            qid="abs_mono",
+        ),
         # BOT/TOP preservation
         ForAll([x], APP(BOT, x) == BOT, qid="app_bot"),
         ForAll([x], APP(TOP, x) == TOP, qid="app_top"),
@@ -520,7 +544,7 @@ def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
     lambda_theory(solver)
     if include_slow:
         extensional_theory(solver)
-        hindley_theory(solver)
+    hindley_theory(solver)
     simple_theory(solver)
     closure_theory(solver)
     if include_slow:
