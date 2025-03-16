@@ -86,6 +86,7 @@ def main(args: argparse.Namespace) -> None:
             cmd.append("proof=true")
             cmd.append("trace=true")
             cmd.append(f"trace-file-name={args.trace_file}")
+        cmd.append("unsat_core=true")
         cmd.append(smt2_path)
         logger.info(f"Running Z3 with command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -100,7 +101,12 @@ def main(args: argparse.Namespace) -> None:
             logger.warning(f"Z3 stderr:\n{result.stderr}")
     else:
         result = solver.check()
-        logger.info(f"Result: {result}")
+        if result == z3.unsat:
+            logger.error(f"Unsat core:\n{solver.unsat_core()}")
+        elif result == z3.sat:
+            logger.info("Satisfiable")
+        else:
+            logger.warning("Satisfiability unknown")
 
     # Print statistics
     stats = solver.statistics()

@@ -67,9 +67,10 @@ def solver(base_solver: z3.Solver) -> Iterator[z3.Solver]:
 def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     with solver, solver_timeout(solver, timeout_ms=1000):
+        solver.set("unsat_core", True)
         result = solver.check()
         if result == z3.unsat:
-            core = solver.unsat_core()
+            core = solver.unsat_core()  # FIXME sometimes core is empty
             logger.error(f"Unsat core:\n{core}")
         assert result != z3.unsat
 
