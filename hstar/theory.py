@@ -454,7 +454,6 @@ def hindley_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
 
     1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
-    logger.info("Adding Hindley theory")
     axioms = [
         ForAll([x], app(TOP, x) == TOP),
         ForAll([x], app(BOT, x) == BOT),
@@ -470,11 +469,12 @@ def hindley_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
         ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z))),
         ForAll([f], app(Y, f) == app(f, app(Y, f))),
     ]
-    equations: set[ExprRef] = set()
-    for axiom in axioms:
-        equations.update(QEHindley(axiom))
-    logger.info(f"Generated {len(axioms)} Hindley equations")
     if solver is not None:
+        logger.info("Adding Hindley theory")
+        equations: set[ExprRef] = set()
+        for axiom in axioms:
+            equations.update(QEHindley(axiom))
+        logger.info(f"Generated {len(axioms)} Hindley equations")
         solver.add(*equations)
     return axioms
 
