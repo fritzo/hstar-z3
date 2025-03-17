@@ -38,7 +38,7 @@ from hstar.language import (
     shift,
     subst,
 )
-from hstar.theory import hindley_theory
+from hstar.theory import hindley_axioms
 
 logger = logging.getLogger(__name__)
 
@@ -424,7 +424,7 @@ def test_forall_to_open(expr: z3.ExprRef, expected: z3.ExprRef) -> None:
     assert z3.eq(actual, expected)
 
 
-HINDLEY_AXIOMS = hindley_theory()
+HINDLEY_AXIOMS = list(hindley_axioms())
 HINDLEY_IDS = [" ".join(str(x).split()) for x in HINDLEY_AXIOMS]
 
 

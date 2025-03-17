@@ -458,7 +458,25 @@ def extensional_theory(solver: z3.Solver) -> None:
     )
 
 
-def hindley_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
+def hindley_axioms() -> Iterator[ExprRef]:
+    yield ForAll([x], app(TOP, x) == TOP)
+    yield ForAll([x], app(BOT, x) == BOT)
+    yield ForAll([x], app(I, x) == x)
+    yield ForAll([x, y], app(K, x, y) == x)
+    yield ForAll([x, y], app(KI, x, y) == y)
+    yield ForAll([x, y], app(J, x, y) == JOIN(x, y))
+    yield ForAll([x, y], app(CI, x, y) == app(y, x))
+    yield ForAll([x, y], app(B, x, y) == COMP(x, y))
+    yield ForAll([x, y], app(CB, x, y) == COMP(y, x))
+    yield ForAll([x, y], app(W, x, y) == app(x, y, y))
+    yield ForAll([x, y, z], app(C, x, y, z) == app(x, z, y))
+    yield ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z)))
+    yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
+    yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
+    yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
+
+
+def hindley_theory(solver: z3.Solver) -> None:
     """
     Hindley-style quantifier free equations for extensionality.
 
@@ -466,29 +484,12 @@ def hindley_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
 
     1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
-    axioms = [
-        ForAll([x], app(TOP, x) == TOP),
-        ForAll([x], app(BOT, x) == BOT),
-        ForAll([x], app(I, x) == x),
-        ForAll([x, y], app(K, x, y) == x),
-        ForAll([x, y], app(KI, x, y) == y),
-        ForAll([x, y], app(J, x, y) == JOIN(x, y)),
-        ForAll([x, y], app(CI, x, y) == app(y, x)),
-        ForAll([x, y], app(W, x, y) == app(x, y, y)),
-        ForAll([x, y, z], app(B, x, y, z) == app(x, app(y, z))),
-        ForAll([x, y, z], app(C, x, y, z) == app(x, z, y)),
-        ForAll([x, y, z], app(CB, x, y, z) == app(y, app(x, z))),
-        ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z))),
-        ForAll([f], app(Y, f) == app(f, app(Y, f))),
-    ]
-    if solver is not None:
-        logger.info("Adding Hindley theory")
-        equations: set[ExprRef] = set()
-        for axiom in axioms:
-            equations.update(QEHindley(axiom))
-        logger.info(f"Generated {len(axioms)} Hindley equations")
-        solver.add(*equations)
-    return axioms
+    logger.info("Adding Hindley theory")
+    equations: set[ExprRef] = set()
+    for axiom in hindley_axioms():
+        equations.update(QEHindley(axiom))
+    logger.info(f"Generated {len(equations)} Hindley equations")
+    solver.add(*equations)
 
 
 def simple_theory(solver: z3.Solver) -> None:
@@ -557,8 +558,9 @@ def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[Exp
     yield ForAll([x], Or(*[APP(t, x) == i for i in inhabs]), qid=f"inhab_{qid}")
 
 
-def types_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
+def types_theory(solver: z3.Solver) -> None:
     """Theory of concrete types."""
+    logger.info("Adding types theory")
     axioms = [
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
@@ -567,10 +569,7 @@ def types_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
         *declare_type(bool_, [TOP, K, KI, BOT], qid="bool"),
     ]
     logger.info(f"Generated {len(axioms)} type axioms")
-    if solver is not None:
-        logger.info("Adding types theory")
-        solver.add(*axioms)
-    return axioms
+    solver.add(*axioms)
 
 
 def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
