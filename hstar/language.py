@@ -55,6 +55,7 @@ S = ABS(ABS(ABS(APP(APP(v2, v0), APP(v1, v0)))))
 Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
 Y_ = ABS(APP(ABS(APP(v0, v0)), ABS(APP(v1, APP(v0, v0)))))
 V = ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))
+V_ = ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))
 DIV = APP(V, ABS(APP(v0, TOP)))
 SIMPLE = z3.Const("SIMPLE", Term)  # TODO define
 

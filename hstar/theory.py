@@ -32,6 +32,7 @@ from .language import (
     SUBST,
     TOP,
     TUPLE,
+    V_,
     VAR,
     Y_,
     B,
@@ -253,6 +254,7 @@ def lambda_theory(solver: z3.Solver) -> None:
         J == app(C, J),
         I == app(W, J),
         Y == Y_,
+        V == V_,
         # Beta reduction of combinators
         ForAll([x], app(I, x) == x, qid="beta_i"),
         ForAll(
@@ -286,6 +288,15 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="beta_b",
         ),
         ForAll(
+            [x, y],
+            app(B, x, y) == COMP(x, y),
+            patterns=[
+                app(B, x, y),
+                MultiPattern(app(B, x), COMP(x, y)),
+            ],
+            qid="beta_b_comp",
+        ),
+        ForAll(
             [x, y, z],
             app(CB, x, y, z) == app(y, app(x, z)),
             patterns=[
@@ -293,6 +304,15 @@ def lambda_theory(solver: z3.Solver) -> None:
                 MultiPattern(app(CB, x, y), app(y, app(x, z))),
             ],
             qid="beta_cb",
+        ),
+        ForAll(
+            [x, y],
+            app(CB, x, y) == COMP(y, x),
+            patterns=[
+                app(CB, x, y),
+                MultiPattern(app(CB, x), COMP(y, x)),
+            ],
+            qid="beta_b_comp",
         ),
         ForAll(
             [x, y, z],
@@ -545,16 +565,20 @@ def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[Exp
     yield ForAll([x], Or(*[APP(t, x) == i for i in inhabs]), qid=f"inhab_{qid}")
 
 
-def types_theory(solver: z3.Solver) -> None:
+def types_theory(solver: z3.Solver | None = None) -> list[ExprRef]:
     """Theory of concrete types."""
-    logger.info("Adding types theory")
-    solver.add(
+    axioms = [
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
         *declare_type(unit, [TOP, I], qid="unit"),
         *declare_type(boool, [TOP, K, KI, J, BOT], qid="boool"),
         *declare_type(bool_, [TOP, K, KI, BOT], qid="bool"),
-    )
+    ]
+    logger.info(f"Generated {len(axioms)} type axioms")
+    if solver is not None:
+        logger.info("Adding types theory")
+        solver.add(*axioms)
+    return axioms
 
 
 def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
