@@ -203,6 +203,7 @@ def order_theory(solver: z3.Solver) -> None:
 # Theory of lambda calculus.
 def lambda_theory(solver: z3.Solver) -> None:
     logger.info("Adding lambda theory")
+    i = z3.Int("i")
     solver.add(
         # Composition properties
         ForAll(
@@ -260,20 +261,18 @@ def lambda_theory(solver: z3.Solver) -> None:
         ForAll(
             [x, y],
             app(K, x, y) == x,
-            # patterns=[APP(K, x)],
             qid="beta_k",
         ),
         ForAll(
             [x, y],
             app(KI, x, y) == y,
-            # patterns=[Pattern(APP(KI, x))],
             qid="beta_ki",
         ),
         ForAll(
             [x, y],
             app(J, x, y) == JOIN(x, y),
             patterns=[
-                # app(J, x, y),
+                app(J, x, y),
                 MultiPattern(app(J, x), JOIN(x, y)),
             ],
             qid="beta_j",
@@ -366,12 +365,30 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="y_fix",
         ),
         # Beta reduction using Z3's SUBST
-        # TODO add linear beta patterns for safe substitution.
+        # The general pattern is lazy, but the BOT,TOP,VAR versions are eager.
         ForAll(
             [x, y],
             APP(ABS(x), y) == SUBST(0, y, x),
             patterns=[MultiPattern(APP(ABS(x), y), SUBST(0, y, x))],
-            qid="beta_app_abs",
+            qid="beta_abs",
+        ),
+        ForAll(
+            [x],
+            APP(ABS(x), BOT) == SUBST(0, BOT, x),
+            patterns=[APP(ABS(x), BOT)],
+            qid="beta_abs_bot",
+        ),
+        ForAll(
+            [x],
+            APP(ABS(x), TOP) == SUBST(0, TOP, x),
+            patterns=[APP(ABS(x), TOP)],
+            qid="beta_abs_top",
+        ),
+        ForAll(
+            [x, i],
+            APP(ABS(x), VAR(i)) == SUBST(0, VAR(i), x),
+            patterns=[APP(ABS(x), VAR(i))],
+            qid="beta_abs_var",
         ),
         # APP-JOIN distributivity (both directions)
         ForAll(
@@ -590,8 +607,8 @@ def add_theory(solver: z3.Solver, *, include_slow: bool = False) -> None:
     if include_slow:
         extensional_theory(solver)
         hindley_theory(solver)
-    simple_theory(solver)
-    closure_theory(solver)
+        simple_theory(solver)
+        closure_theory(solver)
     if include_slow:
         types_theory(solver)
     logger.info(f"Solver statistics:\n{solver.statistics()}")
