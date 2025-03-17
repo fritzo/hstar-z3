@@ -278,31 +278,13 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="beta_j",
         ),
         ForAll(
-            [x, y, z],
-            app(B, x, y, z) == app(x, app(y, z)),
-            patterns=[
-                MultiPattern(app(B, x, y, z), app(y, z)),
-                MultiPattern(app(B, x, y), app(x, app(y, z))),
-            ],
-            qid="beta_b",
-        ),
-        ForAll(
             [x, y],
             app(B, x, y) == COMP(x, y),
             patterns=[
                 app(B, x, y),
                 MultiPattern(app(B, x), COMP(x, y)),
             ],
-            qid="beta_b_comp",
-        ),
-        ForAll(
-            [x, y, z],
-            app(CB, x, y, z) == app(y, app(x, z)),
-            patterns=[
-                MultiPattern(app(CB, x, y, z), app(x, z)),
-                MultiPattern(app(CB, x, y), app(y, app(x, z))),
-            ],
-            qid="beta_cb",
+            qid="beta_b",
         ),
         ForAll(
             [x, y],
@@ -311,7 +293,7 @@ def lambda_theory(solver: z3.Solver) -> None:
                 app(CB, x, y),
                 MultiPattern(app(CB, x), COMP(y, x)),
             ],
-            qid="beta_b_comp",
+            qid="beta_cb",
         ),
         ForAll(
             [x, y, z],
