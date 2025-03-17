@@ -105,19 +105,17 @@ def main(args: argparse.Namespace) -> None:
         logger.info(f"Z3 stdout:\n{result.stdout}")
         if result.stderr:
             logger.warning(f"Z3 stderr:\n{result.stderr}")
+        summarize(args.trace_file)
     else:
         result = solver.check()
         if result == z3.unsat:
-            logger.error("Unsatisfiable")
+            logger.error(f"Unsat core:\n{solver.unsat_core()}")
         elif result == z3.sat:
             logger.info("Satisfiable")
         else:
             logger.warning("Satisfiability unknown")
-
-    # Print statistics
-    stats = solver.statistics()
-    logger.info(f"Z3 Statistics:\n{stats}")
-    summarize(args.trace_file)
+        stats = solver.statistics()
+        logger.info(f"Z3 Statistics:\n{stats}")
 
 
 parser = argparse.ArgumentParser(
