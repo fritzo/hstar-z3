@@ -420,7 +420,9 @@ def _is_v0(term: ExprRef) -> bool:
     return False
 
 
-def iter_eta_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
+def iter_eta_substitutions(
+    expr: ExprRef, *, compose: bool = False
+) -> Iterator[ExprRef]:
     """
     Iterate over Hindley-style substitutions:
         [x/x], [x/a], [x/APP x a] (and maybe [x/COMP x a])
@@ -428,7 +430,8 @@ def iter_eta_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
     varlist = sorted(free_vars(expr))
     assert varlist
     fresh = next(i for i in itertools.count() if i not in varlist)
-    for cases in itertools.product(range(3), repeat=len(varlist)):
+    actions = range(4 if compose else 3)
+    for cases in itertools.product(actions, repeat=len(varlist)):
         result = expr
         for var, case in zip(varlist, cases, strict=False):
             if case == 0:
@@ -437,8 +440,8 @@ def iter_eta_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
                 result = subst(var, VAR(fresh), result)
             elif case == 2:
                 result = subst(var, APP(VAR(var), VAR(fresh)), result)
-            # elif case == 3:
-            #    result = subst(var, COMP(VAR(var), VAR(fresh)), result)
+            elif case == 3:
+                result = subst(var, COMP(VAR(var), VAR(fresh)), result)
         if any(cases):
             yield abstract(result, fresh)
         else:
@@ -446,8 +449,7 @@ def iter_eta_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
 
 
 def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
-    """Iterate over all closing abstractions, including variable
-    coincidence."""
+    """Iterate over all closing abstractions, including variable coincidence."""
     if not free_vars(expr):
         yield expr
         return
@@ -459,6 +461,7 @@ def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
         for other in group - {var}:
             abstracted = subst(other, VAR(var), abstracted)
         abstracted = abstract(abstracted, var)
+        logger.debug(f"Abstracted {expr} -> {abstracted}")
         assert len(free_vars(abstracted)) < len(free_vars(expr))
         yield from iter_closure_maps(abstracted)
 

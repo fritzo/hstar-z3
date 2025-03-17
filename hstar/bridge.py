@@ -134,8 +134,8 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
             elif decl_name == "COMP":
                 # Handle COMP constructor - we'll convert to a lambda term
                 # COMP(f, g) = λx. f(g(x))
-                f = term.arg(0)
-                g = term.arg(1)
+                f = language.shift(term.arg(0))
+                g = language.shift(term.arg(1))
                 # Create the equivalent lambda term: λx. f(g(x))
                 x_var = normal.VAR(0)
                 g_x = normal.APP(z3_to_nf(g), x_var)

@@ -33,6 +33,7 @@ from hstar.language import (
     free_vars,
     hoas,
     iter_closure_maps,
+    iter_closures,
     iter_eta_substitutions,
     shift,
     subst,
@@ -48,6 +49,28 @@ x, y, z = z3.Consts("x y z", Term)
 v0 = VAR(0)
 v1 = VAR(1)
 v2 = VAR(2)
+
+
+def assert_eq_weak(lhs_z3: z3.ExprRef, rhs_z3: z3.ExprRef) -> None:
+    """Weakly check equality of two z3 expressions using hstar.normal."""
+    lhs = z3_to_nf(lhs_z3)
+    rhs = z3_to_nf(rhs_z3)
+    fresh = 1 + max(set(lhs.free_vars) | set(rhs.free_vars), default=-1)
+
+    # Try to normalize by first applying fresh variables, then approximating.
+    for i in range(4):
+        if normal.is_normal(lhs) and normal.is_normal(rhs):
+            break
+        var = normal.VAR(fresh + i)
+        lhs = normal.APP(lhs, var)
+        rhs = normal.APP(rhs, var)
+    lhs = normal.approximate(lhs)
+    rhs = normal.approximate(rhs)
+
+    # Check equality.
+    if lhs != rhs:
+        logger.error(f"{lhs} != {rhs}")
+    assert lhs == rhs
 
 
 def test_shift_eager() -> None:
@@ -257,10 +280,9 @@ def test_abstract(_: str, expr: z3.ExprRef, expected: z3.ExprRef) -> None:
         ABS_expr = ABS(expr)
         assert free_vars(actual) == free_vars(ABS_expr)
 
-        # FIXME assert_eq_weak appears wrong
         # Check back substitution
-        # back = APP(shift(actual), v0)
-        # assert_eq_weak(back, expr)
+        back = APP(shift(actual), v0)
+        assert_eq_weak(back, expr)
 
     # Check hand-coded expectation
     assert z3.eq(actual, expected)
@@ -270,6 +292,26 @@ def test_iter_eta_substitutions() -> None:
     # Test with a variable
     actual = set(iter_eta_substitutions(v1))
     expected = {v1, abstract(v0), abstract(APP(v1, v0))}
+    assert actual == expected
+
+    # Test with application term
+    term = APP(v0, v0)
+    actual = set(iter_eta_substitutions(term))
+    expected = {
+        term,  # [x/x]
+        abstract(subst(0, VAR(2), term), 2),  # [x/a]
+        abstract(subst(0, APP(v0, VAR(2)), term), 2),  # [x/APP x a]
+    }
+    assert actual == expected
+
+    # Test with complex term including abstraction
+    term = APP(ABS(v0), v1)
+    actual = set(iter_eta_substitutions(term))
+    expected = {
+        term,  # [x/x]
+        abstract(subst(1, VAR(2), term), 2),  # [x/a]
+        abstract(subst(1, APP(v1, VAR(2)), term), 2),  # [x/APP x a]
+    }
     assert actual == expected
 
 
@@ -288,6 +330,66 @@ CLOSURE_MAPS_EXAMPLES = [
 def test_iter_closure_maps(term: z3.ExprRef, expected: set[z3.ExprRef]) -> None:
     actual = set(iter_closure_maps(term))
     assert actual == expected
+
+
+def test_iter_eta_substitutions_beta() -> None:
+    """Test eta substitutions for beta reduction axiom."""
+    # The open form of ForAll(x, APP(ABS(VAR(0)), x) == x)
+    beta_eq = APP(ABS(v0), v0) == v0
+
+    # Get all eta substitutions
+    substitutions = list(iter_eta_substitutions(beta_eq))
+
+    # Print for debugging
+    for i, expr in enumerate(substitutions):
+        logger.debug(f"Substitution {i}: {expr}")
+
+    # Check that we get the expected number of substitutions
+    assert len(substitutions) == 3  # Should be 3: [x/x], [x/a], [x/APP x a]
+
+    # The original equation should be in the list
+    assert beta_eq in substitutions
+
+
+def test_iter_closure_maps_beta() -> None:
+    """Test closure maps for beta reduction axiom."""
+    # The open form of ForAll(x, APP(ABS(VAR(0)), x) == x)
+    beta_eq = APP(ABS(v0), v0) == v0
+
+    # Get all closure maps
+    closures = list(iter_closure_maps(beta_eq))
+
+    # Print for debugging
+    for i, closure in enumerate(closures):
+        logger.debug(f"Closure {i}: {closure}")
+        lhs, rhs = closure.children()
+        logger.debug(f"  Free vars: {free_vars(lhs) | free_vars(rhs)}")
+
+    # All resulting expressions should have fewer free variables
+    for expr in closures:
+        assert len(free_vars(expr)) < len(free_vars(beta_eq))
+
+
+def test_iter_closures_beta() -> None:
+    """Test combined closures for beta reduction axiom."""
+    # The open form of ForAll(x, APP(ABS(VAR(0)), x) == x)
+    beta_eq = APP(ABS(v0), v0) == v0
+
+    # Get all closures
+    closures = list(iter_closures(beta_eq))
+
+    # Print for debugging
+    for i, closure in enumerate(closures):
+        logger.debug(f"Complete closure {i}: {closure}")
+        lhs, rhs = closure.children()
+        logger.debug(f"  LHS: {lhs}")
+        logger.debug(f"  RHS: {rhs}")
+        logger.debug(f"  Free vars: {free_vars(lhs) | free_vars(rhs)}")
+        assert_eq_weak(lhs, rhs)  # FIXME fails
+
+    # All resulting expressions should be closed (no free variables)
+    for expr in closures:
+        assert not free_vars(expr), f"Expression has free variables: {expr}"
 
 
 def test_qe_hindley_count() -> None:
@@ -325,7 +427,7 @@ HINDLEY_AXIOMS = hindley_theory()
 HINDLEY_IDS = [" ".join(str(x).split()) for x in HINDLEY_AXIOMS]
 
 
-@pytest.mark.xfail(reason="FIXME")
+# @pytest.mark.xfail(reason="FIXME")
 @pytest.mark.parametrize("axiom", HINDLEY_AXIOMS, ids=HINDLEY_IDS)
 def test_qe_hindley(axiom: z3.ExprRef) -> None:
     equations = list(QEHindley(axiom))
@@ -334,12 +436,4 @@ def test_qe_hindley(axiom: z3.ExprRef) -> None:
         assert z3.is_eq(e)
         assert not free_vars(e)
         lhs, rhs = e.children()
-        lhs_nf = z3_to_nf(lhs)
-        rhs_nf = z3_to_nf(rhs)
-        for i in range(3):
-            if lhs_nf == normal.VAR(i):
-                break
-            var = normal.VAR(i)
-            lhs_nf = normal.app(lhs_nf, var)
-            rhs_nf = normal.app(rhs_nf, var)
-        assert lhs_nf == rhs_nf
+        assert_eq_weak(lhs, rhs)
