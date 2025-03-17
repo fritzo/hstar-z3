@@ -5,8 +5,8 @@ This uses a de Bruijn indexed representation of λ-join-calculus terms, with a
 `LEQ` relation for the Scott ordering, and explicit `BOT` (bottom), `TOP` (top),
 and binary `JOIN` operation wrt the Scott ordering.
 
-The theory includes de Bruijn syntax, Scott ordering, lambda calculus, and
-a types-as-closures.
+The theory includes de Bruijn syntax, Scott ordering, λ-calculus, and
+types-as-closures.
 """
 
 import logging
@@ -201,7 +201,6 @@ def order_theory() -> Iterator[ExprRef]:
     yield ForAll([x], JOIN(x, TOP) == TOP, qid="join_top")  # TOP absorbs
 
 
-# Theory of lambda calculus.
 def lambda_theory() -> Iterator[ExprRef]:
     """Theory of lambda calculus and combinators."""
     i = z3.Int("i")
@@ -214,7 +213,7 @@ def lambda_theory() -> Iterator[ExprRef]:
             MultiPattern(APP(COMP(f, g), x), APP(g, x)),
             MultiPattern(COMP(f, g), APP(f, APP(g, x))),
         ],
-        qid="comp_beta",
+        qid="beta_comp",
     )
     yield ForAll([f], COMP(f, I) == f, qid="comp_id_right")
     yield ForAll([f], COMP(I, f) == f, qid="comp_id_left")
@@ -454,6 +453,7 @@ def lambda_theory() -> Iterator[ExprRef]:
 # FIXME this theory hangs.
 def extensional_theory() -> Iterator[ExprRef]:
     """Extensionality axioms of lambda calculus."""
+    # These nested quantifiers are hopeless.
     yield ForAll(
         [f, g],
         Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
@@ -467,6 +467,7 @@ def extensional_theory() -> Iterator[ExprRef]:
 
 
 def hindley_axioms() -> Iterator[ExprRef]:
+    """Yields beta reduction axioms for combinators."""
     yield ForAll([x], app(TOP, x) == TOP)
     yield ForAll([x], app(BOT, x) == BOT)
     yield ForAll([x], app(I, x) == x)
@@ -479,6 +480,8 @@ def hindley_axioms() -> Iterator[ExprRef]:
     yield ForAll([x, y], app(W, x, y) == app(x, y, y))
     yield ForAll([x, y, z], app(C, x, y, z) == app(x, z, y))
     yield ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z)))
+    yield ForAll([x, y, z], app(COMP(x, y), z) == app(x, app(y, z)))
+    yield ForAll([x, y, z], app(JOIN(x, y), z) == JOIN(app(x, z), app(y, z)))
     yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
     yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
     yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
