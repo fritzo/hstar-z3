@@ -213,7 +213,7 @@ def lambda_theory(solver: z3.Solver) -> None:
                 MultiPattern(APP(COMP(f, g), x), APP(g, x)),
                 MultiPattern(COMP(f, g), APP(f, APP(g, x))),
             ],
-            qid="comp_def",
+            qid="comp_beta",
         ),
         ForAll([f], COMP(f, I) == f, qid="comp_id_right"),
         ForAll([f], COMP(I, f) == f, qid="comp_id_left"),
@@ -338,14 +338,7 @@ def lambda_theory(solver: z3.Solver) -> None:
             qid="beta_y",
         ),
         # Fixed point equations
-        app(S, I, Y) == Y,
-        ForAll([y], Implies(app(S, I, y) == y, y == Y), qid="siy"),
-        ForAll(
-            [f, x],
-            Implies(LEQ(APP(f, x), x), LEQ(APP(Y, f), x)),
-            patterns=[MultiPattern(LEQ(APP(f, x), x), APP(Y, f))],
-            qid="y_fix",
-        ),
+        ForAll([y], (app(S, I, y) == y) == (y == Y), qid="siy"),
         # Beta reduction using Z3's SUBST
         # The general pattern is lazy, but the BOT,TOP,VAR versions are eager.
         ForAll(
