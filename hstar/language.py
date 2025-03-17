@@ -49,7 +49,7 @@ J = JOIN(K, KI)
 B = ABS(ABS(ABS(APP(v2, APP(v1, v0)))))
 C = ABS(ABS(ABS(APP(APP(v2, v0), v1))))
 CI = ABS(ABS(APP(v1, v0)))
-CB = ABS(ABS(ABS(APP(v2, APP(v0, v1)))))
+CB = ABS(ABS(ABS(APP(v1, APP(v2, v0)))))
 W = ABS(ABS(APP(APP(v1, v0), v0)))
 S = ABS(ABS(ABS(APP(APP(v2, v0), APP(v1, v0)))))
 Y = ABS(APP(ABS(APP(v1, APP(v0, v0))), ABS(APP(v1, APP(v0, v0)))))
@@ -319,12 +319,28 @@ def abstract(term: ExprRef, i: int = 0) -> ExprRef:
     return _abstract(term)
 
 
+def _maybe_abstract(term: ExprRef) -> tuple[bool, bool, ExprRef]:
+    """
+    Return a tuple of (has_v0, is_v0, abstracted_term).
+
+    if has_v0, then abstracted_term is beta-eta equivalent to ABS(term).
+    otherwise, abstracted_term is beta-eta equivalent to shift(term, delta=-1).
+    """
+    if z3.eq(term, v0):
+        return True, True, I
+    if 0 in free_vars(term):
+        return True, False, _abstract(term)
+    return False, False, shift(term, delta=-1)
+
+
 @functools.lru_cache
 def _abstract(term: ExprRef) -> ExprRef:
+    """Returns a combinator beta-eta equivalent to ABS(term)."""
     # Handle terms that don't contain VAR(0) directly
     if not _has_v0(term):
         # K abstraction
-        return APP(K, shift(term, delta=-1))
+        term_shift = shift(term, delta=-1)
+        return APP(K, term_shift)
 
     if z3.is_app(term):
         decl = term.decl()
@@ -336,60 +352,59 @@ def _abstract(term: ExprRef) -> ExprRef:
 
         if decl_name == "APP":
             # I,K,C,S,W,COMP,eta abstraction
-            lhs, rhs = term.arg(0), term.arg(1)
-            if _has_v0(lhs):
-                lhs_abs = _abstract(lhs)
-                if _has_v0(rhs):
-                    if _is_v0(rhs):  # rhs is exactly VAR(0)
-                        return APP(W, lhs_abs)
-                    else:
-                        return APP(APP(S, lhs_abs), _abstract(rhs))
-                else:
-                    return APP(APP(C, lhs_abs), shift(rhs, delta=-1))
-            else:
-                assert _has_v0(rhs)
-                if _is_v0(rhs):  # rhs is exactly VAR(0)
-                    return shift(lhs, delta=-1)
-                else:
-                    return COMP(shift(lhs, delta=-1), _abstract(rhs))
+            lhs_has, lhs_is, lhs = _maybe_abstract(term.arg(0))
+            rhs_has, rhs_is, rhs = _maybe_abstract(term.arg(1))
+            if lhs_has:
+                if rhs_is:
+                    return APP(W, lhs)  # W lhs x = lhs x x
+                if rhs_has:
+                    return app(S, lhs, rhs)  # S lhs rhs x = lhs x (rhs x)
+                return app(C, lhs, rhs)  # C lhs rhs x = lhs x rhs
+            assert rhs_has
+            if rhs_is:
+                return lhs  # lhs x
+            return COMP(lhs, rhs)  # lhs o rhs x = lhs (rhs x)
 
         elif decl_name == "COMP":
             # K,B,CB,C,S,COMP,eta abstraction
-            lhs, rhs = term.arg(0), term.arg(1)
-            if _has_v0(lhs):
-                lhs_abs = _abstract(lhs)
-                if _has_v0(rhs):
-                    return APP(APP(S, COMP(B, lhs_abs)), _abstract(rhs))
-                else:
-                    if _is_v0(lhs):
-                        return APP(CB, shift(rhs, delta=-1))
-                    else:
-                        return COMP(APP(CB, shift(rhs, delta=-1)), lhs_abs)
-            else:
-                assert _has_v0(rhs)
-                if _is_v0(rhs):
-                    return APP(B, shift(lhs, delta=-1))
-                else:
-                    return COMP(APP(B, shift(lhs, delta=-1)), _abstract(rhs))
+            lhs_has, lhs_is, lhs = _maybe_abstract(term.arg(0))
+            rhs_has, rhs_is, rhs = _maybe_abstract(term.arg(1))
+            if lhs_has:
+                if rhs_has:
+                    # S (B o lhs) rhs x = B (lhs x) (rhs x) = (lhs x) o (rhs x)
+                    return app(S, COMP(B, lhs), rhs)
+                if lhs_is:
+                    return APP(CB, rhs)  # CB rhs x = x o rhs
+                # (CB rhs) o lhs x = CB rhs (lhs x) = (lhs x) o rhs
+                return COMP(APP(CB, rhs), lhs)
+            assert rhs_has
+            if rhs_is:
+                return APP(B, lhs)  # B lhs x = lhs o x
+            # (B lhs) o rhs x = B lhs (rhs x) = lhs o (rhs x)
+            return COMP(APP(B, lhs), rhs)
 
         elif decl_name == "JOIN":
-            # K-compose-eta abstraction
-            lhs, rhs = term.arg(0), term.arg(1)
-            if _has_v0(lhs):
-                if _has_v0(rhs):
-                    return JOIN(_abstract(lhs), _abstract(rhs))
-                elif _is_v0(lhs):
-                    return APP(J, shift(rhs, delta=-1))
-                else:
-                    return COMP(APP(J, shift(rhs, delta=-1)), _abstract(lhs))
-            else:
-                assert _has_v0(rhs)
-                if _is_v0(rhs):
-                    return APP(J, shift(lhs, delta=-1))
-                else:
-                    return COMP(APP(J, shift(lhs, delta=-1)), _abstract(rhs))
+            # K-compose-eta-commutative-idempotent abstraction
+            lhs_has, lhs_is, lhs = _maybe_abstract(term.arg(0))
+            rhs_has, rhs_is, rhs = _maybe_abstract(term.arg(1))
+            if lhs_is:
+                if rhs_is:
+                    return I  # I x = x = x | x
+                if rhs_has:
+                    return app(S, J, rhs)  # S J rhs x = J x (rhs x) = x | rhs x
+                return APP(J, rhs)  # J rhs x = rhs | x
+            if lhs_has:
+                if rhs_is:
+                    return app(S, J, lhs)  # S J lhs x = J x (lhs x) = x | lhs x
+                if rhs_has:
+                    return JOIN(lhs, rhs)
+                return COMP(APP(J, rhs), lhs)  # (J rhs) o lhs x = J rhs (lhs x)
+            if rhs_is:
+                return APP(J, lhs)  # J lhs x = lhs | x
+            assert rhs_has
+            return COMP(APP(J, lhs), rhs)  # (J lhs) o rhs x = J lhs (rhs x)
 
-    raise ValueError(f"Unsupported term: {term}")
+    raise TypeError(f"Unsupported term: {term}")
 
 
 def _has_v0(term: ExprRef) -> bool:

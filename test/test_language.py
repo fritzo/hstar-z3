@@ -199,31 +199,75 @@ def test_free_vars() -> None:
     assert set(free_vars(APP(ABS(APP(v0, v1)), v2))) == {0, 2}
 
 
-def test_abstraction() -> None:
-    assert z3.eq(abstract(v0), I)
-    assert z3.eq(abstract(v1), APP(K, v0))
+ABSTRACTION_EXAMPLES = [
+    # Term doesn't contain v0 - K abstraction
+    ("const", v1, app(K, v0)),
+    # I abstraction - term is exactly v0
+    ("var", v0, I),
+    # APP cases:
+    # Case 1: lhs has v0, rhs is v0 - W abstraction
+    ("app-w", app(v1, v0, v0), app(W, v0)),
+    # Case 2: lhs has v0, rhs has v0 but isn't v0 - S abstraction
+    ("app-s", app(v1, v0, app(v2, v0)), app(S, v0, v1)),
+    # Case 3: lhs has v0, rhs doesn't have v0 - C abstraction
+    ("app-c", app(v1, v0, v2), app(C, v0, v1)),
+    # Case 4: lhs doesn't have v0, rhs is v0 - lhs identity
+    ("app-id", app(v1, v0), v0),
+    # Case 5: lhs doesn't have v0, rhs has v0 but isn't v0 - COMP abstraction
+    ("app-comp", app(v1, app(v2, v0)), COMP(v0, v1)),
+    # COMP cases:
+    # Case 1: lhs has v0, rhs has v0 - S (B o lhs) rhs abstraction
+    ("comp-s", COMP(app(v1, v0), app(v2, v0)), app(S, COMP(B, v0), v1)),
+    # Case 2: lhs is v0, rhs doesn't have v0 - CB rhs abstraction
+    ("comp-cb", COMP(v0, v1), app(CB, v0)),
+    # Case 3: lhs has v0 but isn't v0, rhs doesn't have v0 - COMP(APP(CB, rhs), lhs)
+    ("comp-cb-lhs", COMP(app(v1, v0), v2), COMP(app(CB, v1), v0)),
+    # Case 4: lhs doesn't have v0, rhs is v0 - B lhs abstraction
+    ("comp-b-lhs", COMP(v1, v0), app(B, v0)),
+    # Case 5: lhs doesn't have v0, rhs has v0 but isn't v0 - COMP(APP(B, lhs), rhs)
+    ("comp-b-rhs", COMP(v1, app(v2, v0)), COMP(app(B, v0), v1)),
+    # JOIN cases:
+    # Case 1: lhs is v0, rhs is v0 - I abstraction (idempotent join)
+    ("join-id", JOIN(v0, v0), I),
+    # Case 2: lhs is v0, rhs has v0 but isn't v0 - S J rhs
+    ("join-s-rhs", JOIN(v0, app(v1, v0)), app(S, J, v0)),
+    # Case 3: lhs is v0, rhs doesn't have v0 - J rhs
+    ("join-j-rhs", JOIN(v0, v1), app(J, v0)),
+    # Case 4: lhs has v0 but isn't v0, rhs is v0 - S J lhs
+    ("join-s-lhs", JOIN(app(v1, v0), v0), app(S, J, v0)),
+    # Case 5: lhs has v0 but isn't v0, rhs has v0 but isn't v0 - JOIN(lhs, rhs)
+    ("join-lhs-rhs", JOIN(app(v1, v0), app(v2, v0)), JOIN(v0, v1)),
+    # Case 6: lhs has v0 but isn't v0, rhs doesn't have v0 - COMP(APP(J, rhs), lhs)
+    ("join-comp-rhs", JOIN(app(v1, v0), v2), COMP(app(J, v1), v0)),
+    # Case 7: lhs doesn't have v0, rhs is v0 - J lhs
+    ("join-j-lhs", JOIN(v1, v0), app(J, v0)),
+    # Case 8: lhs doesn't have v0, rhs has v0 but isn't v0 - COMP(APP(J, lhs), rhs)
+    ("join-comp-lhs", JOIN(v1, app(v2, v0)), COMP(app(J, v0), v1)),
+    # Equality
+    ("eq", v0 == v1, I == app(K, v0)),
+]
+ABSTRACTION_IDS = [str(x[0]) for x in ABSTRACTION_EXAMPLES]
 
-    assert z3.eq(abstract(APP(APP(v1, v0), v0)), APP(W, v0))
-    assert z3.eq(abstract(APP(APP(v1, v0), APP(v2, v0))), APP(APP(S, v0), v1))
-    assert z3.eq(abstract(APP(APP(v1, v0), v2)), APP(APP(C, v0), v1))
-    assert z3.eq(abstract(APP(v1, APP(v2, v0))), COMP(v0, v1))
 
-    assert z3.eq(abstract(COMP(APP(v1, v0), APP(v2, v0))), APP(APP(S, COMP(B, v0)), v1))
-    assert z3.eq(abstract(COMP(APP(v1, v0), v2)), COMP(APP(CB, v1), v0))
-    assert z3.eq(abstract(COMP(v1, APP(v2, v0))), COMP(APP(B, v0), v1))
-    assert z3.eq(abstract(COMP(v1, v0)), APP(B, v0))
-    assert z3.eq(abstract(COMP(v0, v1)), APP(CB, v0))
+@pytest.mark.parametrize("_, expr, expected", ABSTRACTION_EXAMPLES, ids=ABSTRACTION_IDS)
+def test_abstract(_: str, expr: z3.ExprRef, expected: z3.ExprRef) -> None:
+    actual = abstract(expr)
+    if not z3.is_eq(expr):
+        # Check free variables
+        ABS_expr = ABS(expr)
+        assert free_vars(actual) == free_vars(ABS_expr)
 
-    assert z3.eq(abstract(JOIN(APP(v1, v0), APP(v2, v0))), JOIN(v0, v1))
-    assert z3.eq(abstract(JOIN(v1, APP(v2, v0))), COMP(APP(J, v0), v1))
-    assert z3.eq(abstract(JOIN(APP(v1, v0), v2)), COMP(APP(J, v1), v0))
-    assert z3.eq(abstract(JOIN(v1, v0)), APP(J, v0))
-    assert z3.eq(abstract(JOIN(v0, v1)), APP(J, v0))
+        # FIXME assert_eq_weak appears wrong
+        # Check back substitution
+        # back = APP(shift(actual), v0)
+        # assert_eq_weak(back, expr)
 
-    assert z3.eq(abstract(v0 == v1), I == APP(K, v0))
+    # Check hand-coded expectation
+    assert z3.eq(actual, expected)
 
 
 def test_iter_eta_substitutions() -> None:
+    # Test with a variable
     actual = set(iter_eta_substitutions(v1))
     expected = {v1, abstract(v0), abstract(APP(v1, v0))}
     assert actual == expected
