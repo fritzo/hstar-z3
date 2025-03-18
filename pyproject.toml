@@ -23,17 +23,18 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "black[jupyter]",
+    "ipykernel",
+    "jupyter",
+    "matplotlib",
+    "mypy",
+    "nbqa",
+    "nbstripout",
+    "notebook",
     "pytest",
     "pytest-timeout",
-    "black[jupyter]",
     "ruff",
-    "mypy",
-    "jupyter",
-    "notebook",
-    "matplotlib",
-    "ipykernel",
-    "nbstripout",
-    "nbqa",
+    "snakeviz",
 ]
 
 [tool.setuptools]

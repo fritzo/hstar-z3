@@ -462,7 +462,7 @@ def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
         for other in group - {var}:
             abstracted = subst(other, VAR(var), abstracted)
         abstracted = abstract(abstracted, var)
-        logger.debug(f"Abstracted {expr} -> {abstracted}")
+        # logger.debug(f"Abstracted {expr} -> {abstracted}")
         assert len(free_vars(abstracted)) < len(free_vars(expr))
         yield from iter_closure_maps(abstracted)
 
