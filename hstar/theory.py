@@ -72,40 +72,44 @@ def de_bruijn_theory() -> Iterator[ExprRef]:
     lhs = z3.Const("lhs", Term)
     rhs = z3.Const("rhs", Term)
     start = z3.Int("start")
+    delta = z3.Int("delta")
 
     # SHIFT axioms, deterministically executed forwards.
     yield ForAll(
-        [i, start],
-        SHIFT(VAR(i), start) == VAR(If(i >= start, i + 1, i)),
-        patterns=[SHIFT(VAR(i), start)],
+        [i, start, delta],
+        SHIFT(VAR(i), start, delta) == VAR(If(i >= start, i + delta, i)),
+        patterns=[SHIFT(VAR(i), start, delta)],
         qid="shift_var",
     )
     yield ForAll(
-        [x, start],
-        SHIFT(ABS(x), start) == ABS(SHIFT(x, start + 1)),
-        patterns=[SHIFT(ABS(x), start)],
+        [x, start, delta],
+        SHIFT(ABS(x), start, delta) == ABS(SHIFT(x, start + 1, delta)),
+        patterns=[SHIFT(ABS(x), start, delta)],
         qid="shift_abs",
     )
     yield ForAll(
-        [lhs, rhs, start],
-        SHIFT(APP(lhs, rhs), start) == APP(SHIFT(lhs, start), SHIFT(rhs, start)),
-        patterns=[SHIFT(APP(lhs, rhs), start)],
+        [lhs, rhs, start, delta],
+        SHIFT(APP(lhs, rhs), start, delta)
+        == APP(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
+        patterns=[SHIFT(APP(lhs, rhs), start, delta)],
         qid="shift_app",
     )
     yield ForAll(
-        [lhs, rhs, start],
-        SHIFT(JOIN(lhs, rhs), start) == JOIN(SHIFT(lhs, start), SHIFT(rhs, start)),
-        patterns=[SHIFT(JOIN(lhs, rhs), start)],
+        [lhs, rhs, start, delta],
+        SHIFT(JOIN(lhs, rhs), start, delta)
+        == JOIN(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
+        patterns=[SHIFT(JOIN(lhs, rhs), start, delta)],
         qid="shift_join",
     )
     yield ForAll(
-        [lhs, rhs, start],
-        SHIFT(COMP(lhs, rhs), start) == COMP(SHIFT(lhs, start), SHIFT(rhs, start)),
-        patterns=[SHIFT(COMP(lhs, rhs), start)],
+        [lhs, rhs, start, delta],
+        SHIFT(COMP(lhs, rhs), start, delta)
+        == COMP(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
+        patterns=[SHIFT(COMP(lhs, rhs), start, delta)],
         qid="shift_comp",
     )
-    yield ForAll([start], SHIFT(TOP, start) == TOP, qid="shift_top")
-    yield ForAll([start], SHIFT(BOT, start) == BOT, qid="shift_bot")
+    yield ForAll([start, delta], SHIFT(TOP, start, delta) == TOP, qid="shift_top")
+    yield ForAll([start, delta], SHIFT(BOT, start, delta) == BOT, qid="shift_bot")
 
     # SUBST axioms, deterministically executed forwards.
     yield ForAll(
@@ -116,7 +120,7 @@ def de_bruijn_theory() -> Iterator[ExprRef]:
     )
     yield ForAll(
         [body, i, x],
-        SUBST(i, x, ABS(body)) == ABS(SUBST(i + 1, SHIFT(x, 0), body)),
+        SUBST(i, x, ABS(body)) == ABS(SUBST(i + 1, SHIFT(x, 0, 1), body)),
         patterns=[SUBST(i, x, ABS(body))],
         qid="subst_abs",
     )
@@ -164,8 +168,7 @@ def order_theory() -> Iterator[ExprRef]:
     yield Not(LEQ(TOP, BOT))
 
     # JOIN is least upper bound
-    yield ForAll([x, y], LEQ(x, JOIN(x, y)), qid="leq_join_left")
-    yield ForAll([x, y], LEQ(y, JOIN(x, y)), qid="leq_join_right")
+    yield ForAll([x, y], LEQ(x, JOIN(x, y)), qid="leq_join")
     yield ForAll(
         [x, y, z],
         And(LEQ(x, z), LEQ(y, z)) == LEQ(JOIN(x, y), z),
@@ -184,17 +187,6 @@ def order_theory() -> Iterator[ExprRef]:
         qid="join_assoc",
     )
     yield ForAll([x], JOIN(x, x) == x, qid="join_idem")
-
-    # Distributivity
-    yield ForAll(
-        [x, y, z],
-        JOIN(x, JOIN(y, z)) == JOIN(JOIN(x, y), JOIN(x, z)),
-        patterns=[
-            MultiPattern(JOIN(x, JOIN(y, z)), JOIN(x, y), JOIN(x, z)),
-            MultiPattern(JOIN(y, z), JOIN(JOIN(x, y), JOIN(x, z))),
-        ],
-        qid="join_dist",
-    )
 
     # JOIN with BOT/TOP
     yield ForAll([x], JOIN(x, BOT) == x, qid="join_bot")  # BOT is identity
@@ -261,6 +253,8 @@ def lambda_theory() -> Iterator[ExprRef]:
     yield V == V_
 
     # Beta reduction of combinators
+    yield ForAll([x], app(BOT, x) == BOT, qid="beta_bot")
+    yield ForAll([x], app(TOP, x) == TOP, qid="beta_top")
     yield ForAll([x], app(I, x) == x, qid="beta_i")
     yield ForAll(
         [x, y],
@@ -283,6 +277,15 @@ def lambda_theory() -> Iterator[ExprRef]:
     )
     yield ForAll(
         [x, y],
+        app(CI, x, y) == app(y, x),
+        patterns=[
+            MultiPattern(app(CI, x, y)),
+            MultiPattern(app(CI, x), app(y, x)),
+        ],
+        qid="beta_ci",
+    )
+    yield ForAll(
+        [x, y],
         app(B, x, y) == COMP(x, y),
         patterns=[
             app(B, x, y),
@@ -300,24 +303,6 @@ def lambda_theory() -> Iterator[ExprRef]:
         qid="beta_cb",
     )
     yield ForAll(
-        [x, y, z],
-        app(C, x, y, z) == app(x, z, y),
-        patterns=[
-            MultiPattern(app(C, x, y, z), app(x, z)),
-            MultiPattern(app(C, x, y), app(x, z, y)),
-        ],
-        qid="beta_c",
-    )
-    yield ForAll(
-        [x, y],
-        app(CI, x, y) == app(y, x),
-        patterns=[
-            MultiPattern(app(CI, x, y)),
-            MultiPattern(app(CI, x), app(y, x)),
-        ],
-        qid="beta_ci",
-    )
-    yield ForAll(
         [x, y],
         app(W, x, y) == app(x, y, y),
         patterns=[
@@ -325,6 +310,15 @@ def lambda_theory() -> Iterator[ExprRef]:
             MultiPattern(app(W, x), app(x, y, y)),
         ],
         qid="beta_w",
+    )
+    yield ForAll(
+        [x, y, z],
+        app(C, x, y, z) == app(x, z, y),
+        patterns=[
+            MultiPattern(app(C, x, y, z), app(x, z)),
+            MultiPattern(app(C, x, y), app(x, z, y)),
+        ],
+        qid="beta_c",
     )
     yield ForAll(
         [x, y, z],
@@ -349,25 +343,28 @@ def lambda_theory() -> Iterator[ExprRef]:
     # The general pattern is lazy, but the BOT,TOP,VAR versions are eager.
     yield ForAll(
         [x, y],
-        APP(ABS(x), y) == SUBST(0, y, x),
-        patterns=[MultiPattern(APP(ABS(x), y), SUBST(0, y, x))],
+        APP(ABS(x), y) == SHIFT(SUBST(0, SHIFT(y, 0, 1), x), 0, -1),
+        patterns=[
+            MultiPattern(APP(ABS(x), y), SUBST(0, SHIFT(y, 0, 1), x)),
+            MultiPattern(ABS(x), SHIFT(SUBST(0, SHIFT(y, 0, 1), x), 0, -1)),
+        ],
         qid="beta_abs",
     )
     yield ForAll(
         [x],
-        APP(ABS(x), BOT) == SUBST(0, BOT, x),
+        APP(ABS(x), BOT) == SHIFT(SUBST(0, BOT, x), 0, -1),
         patterns=[APP(ABS(x), BOT)],
         qid="beta_abs_bot",
     )
     yield ForAll(
         [x],
-        APP(ABS(x), TOP) == SUBST(0, TOP, x),
+        APP(ABS(x), TOP) == SHIFT(SUBST(0, TOP, x), 0, -1),
         patterns=[APP(ABS(x), TOP)],
         qid="beta_abs_top",
     )
     yield ForAll(
         [x, i],
-        APP(ABS(x), VAR(i)) == SUBST(0, VAR(i), x),
+        APP(ABS(x), VAR(i)) == SHIFT(SUBST(0, VAR(i + 1), x), 0, -1),
         patterns=[APP(ABS(x), VAR(i))],
         qid="beta_abs_var",
     )
@@ -430,8 +427,6 @@ def lambda_theory() -> Iterator[ExprRef]:
     )
 
     # BOT/TOP preservation
-    yield ForAll([x], APP(BOT, x) == BOT, qid="app_bot")
-    yield ForAll([x], APP(TOP, x) == TOP, qid="app_top")
     yield ABS(BOT) == BOT
     yield ABS(TOP) == TOP
 
@@ -447,7 +442,8 @@ def lambda_theory() -> Iterator[ExprRef]:
     )
 
     # Eta conversion
-    yield ForAll([f], ABS(APP(SHIFT(f, 0), VAR(0))) == f, qid="eta_conv")
+    if not "FIXME":  # this proximally causes unsatisfiability
+        yield ForAll([f], ABS(APP(SHIFT(f, 0, 1), VAR(0))) == f, qid="eta_conv")
 
 
 # FIXME this theory hangs.

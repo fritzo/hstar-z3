@@ -32,7 +32,7 @@ VAR = z3.Function("VAR", z3.IntSort(), Term)
 ABS = z3.Function("ABS", Term, Term)
 
 # De Bruijn operations.
-SHIFT = z3.Function("SHIFT", Term, z3.IntSort(), Term)
+SHIFT = z3.Function("SHIFT", Term, z3.IntSort(), z3.IntSort(), Term)
 SUBST = z3.Function("SUBST", z3.IntSort(), Term, Term, Term)
 
 # Scott ordering.
@@ -85,7 +85,7 @@ def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
         # Check if we have a symbolic variable (like a, x, etc.)
         if term.decl().kind() == z3.Z3_OP_UNINTERPRETED:
             # This is a symbolic variable, just return unevaluated SHIFT
-            return SHIFT(term, z3.IntVal(start))
+            return SHIFT(term, z3.IntVal(start), z3.IntVal(delta))
 
     try:
         # Use Z3's application inspection functions directly
@@ -128,7 +128,7 @@ def shift(term: ExprRef, start: int = 0, delta: int = 1) -> ExprRef:
         pass
 
     # Fall back to unevaluated SHIFT for any other expressions
-    return SHIFT(term, z3.IntVal(start))
+    return SHIFT(term, z3.IntVal(start), z3.IntVal(delta))
 
 
 def join(*args: ExprRef) -> ExprRef:
