@@ -1,4 +1,5 @@
 import functools
+import inspect
 import logging
 import weakref
 from collections.abc import (
@@ -7,7 +8,7 @@ from collections.abc import (
     MutableMapping,
 )
 from typing import Any, NewType, ParamSpec, TypeVar
-from weakref import WeakValueDictionary
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 from .hashcons import intern
 from .metrics import COUNTERS
@@ -92,7 +93,59 @@ def _make_arg_kwarg_key(
 def weak_key_cache(func: Callable[A, B]) -> Callable[A, B]:
     """
     Decorator to memoize a function of variably many hash cons'd args.
+
+    Uses inspect to determine the best caching strategy:
+    - For single-argument functions, use _weak_arg_cache with WeakKeyDictionary
+    - For functions with multiple args or kwargs, use _weak_args_kwargs_cache
     """
+    sig = inspect.signature(func)
+
+    # Check if the function accepts keyword arguments or has multiple parameters
+    has_kwargs = any(
+        param.kind in (param.VAR_KEYWORD, param.KEYWORD_ONLY)
+        for param in sig.parameters.values()
+    )
+    multiple_params = len(sig.parameters) > 1
+
+    if has_kwargs or multiple_params:
+        return _weak_args_kwargs_cache(func)
+    else:
+        return _weak_arg_cache(func)  # type: ignore
+
+
+def _weak_arg_cache(func: Callable[[H], B]) -> Callable[[H], B]:
+    """
+    Decorator to memoize a function with a single hashable argument.
+    Uses a WeakKeyDictionary for caching to allow garbage collection.
+    """
+    cache: WeakKeyDictionary[H, B] = WeakKeyDictionary()
+    name = qualname(func)
+    miss = name + ".miss"
+    hit = name + ".hit"
+
+    @functools.wraps(func)
+    def memoized_func(arg: H) -> B:
+        arg = intern(arg)
+
+        # Check cache.
+        try:
+            result = cache[arg]
+        except KeyError:
+            counter[miss] += 1
+        else:
+            counter[hit] += 1
+            return result
+
+        # Compute result and save in cache.
+        result = func(arg)
+        cache[arg] = result
+        return result
+
+    memoized_func.cache = cache  # type: ignore
+    return memoized_func
+
+
+def _weak_args_kwargs_cache(func: Callable[A, B]) -> Callable[A, B]:
     cache: dict[Hashable, B] = {}
     name = qualname(func)
     miss = name + ".miss"
