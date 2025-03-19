@@ -17,9 +17,9 @@ EXAMPLES: list[tuple[normal.Term, z3.ExprRef]] = [
     (normal.VAR(1), language.VAR(1)),  # Variable 1
     # Lambda Abstractions
     # λx.x (identity)
-    (normal.ABS(normal.VAR(0)), language.ABS(language.VAR(0))),
+    (normal.ABS(normal.VAR(0)), language.I),
     # λx.y (constant function)
-    (normal.ABS(normal.VAR(1)), language.ABS(language.VAR(1))),
+    (normal.ABS(normal.VAR(1)), language.APP(language.K, language.VAR(0))),
     # Applications
     # x y
     (
@@ -36,22 +36,14 @@ EXAMPLES: list[tuple[normal.Term, z3.ExprRef]] = [
     # λx.x y
     (
         normal.ABS(normal.APP(normal.VAR(0), normal.VAR(1))),
-        language.ABS(language.APP(language.VAR(0), language.VAR(1))),
-    ),
-    # λx.x y
-    (
-        normal.ABS(normal.APP(normal.VAR(0), normal.VAR(1))),
-        language.ABS(language.APP(language.VAR(0), language.VAR(1))),
+        language.app(language.C, language.I, language.VAR(0)),
     ),
     # (λx.x) | (y z)
     (
         normal.JOIN(
             normal.ABS(normal.VAR(0)), normal.APP(normal.VAR(1), normal.VAR(2))
         ),
-        language.JOIN(
-            language.ABS(language.VAR(0)),
-            language.APP(language.VAR(1), language.VAR(2)),
-        ),
+        language.JOIN(language.I, language.APP(language.VAR(1), language.VAR(2))),
     ),
     # Multiple joins
     # x | y | z

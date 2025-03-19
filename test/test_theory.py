@@ -6,10 +6,10 @@ import z3
 from z3 import And, ForAll, Implies, Not
 
 from hstar.language import (
-    ABS,
     ANY,
     APP,
     BOT,
+    CI,
     CONV,
     DIV,
     JOIN,
@@ -23,6 +23,7 @@ from hstar.language import (
     B,
     C,
     I,
+    J,
     K,
     S,
     Term,
@@ -30,10 +31,10 @@ from hstar.language import (
     Y,
     bool_,
     boool,
+    lam,
     pair,
     pre_pair,
     semi,
-    shift,
     unit,
 )
 from hstar.solvers import find_counterexample, solver_timeout, try_prove
@@ -128,21 +129,16 @@ LAMBDA_EXAMPLES = {
     r"(\x.x)BOT = BOT": APP(I, BOT) == BOT,
     r"(\x.x)TOP = TOP": APP(I, TOP) == TOP,
     # Eta conversion
-    r"\x.fx = f": ABS(APP(shift(f), VAR(0))) == f,
+    r"\x.fx = f": lam(v0, APP(f, v0)) == f,
     # Function application monotonicity
     "f [= g => fx [= gx": Implies(LEQ(f, g), LEQ(APP(f, x), APP(g, x))),
     "x [= y => fx [= fy": Implies(LEQ(x, y), LEQ(APP(f, x), APP(f, y))),
-    # Abstraction monotonicity
-    r"x [= y -> \x [= \y": Implies(LEQ(x, y), LEQ(ABS(x), ABS(y))),
     # Distributivity
     "(f|g)x = fx|gx": APP(JOIN(f, g), x) == JOIN(APP(f, x), APP(g, x)),
     "fx|fy [= f(x|y)": LEQ(JOIN(APP(f, x), APP(f, y)), APP(f, JOIN(x, y))),
-    r"\(x|y) = \x|\y": ABS(JOIN(x, y)) == JOIN(ABS(x), ABS(y)),
     # BOT/TOP preservation
     "BOT x = BOT": APP(BOT, x) == BOT,
     "TOP x = TOP": APP(TOP, x) == TOP,
-    r"\BOT = BOT": ABS(BOT) == BOT,
-    r"\TOP = TOP": ABS(TOP) == TOP,
     # Extensionality
     r"(/\x. fx=gx) => f=g": Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
 }
@@ -170,12 +166,12 @@ CONV_EXAMPLES = {
     # Fixed point property
     "DIV x = DIV(x TOP)": APP(DIV, x) == APP(DIV, APP(x, TOP)),
     # Constant functions converge
-    r"CONV(\x.TOP)": CONV(ABS(TOP)),
-    r"CONV(\x.x)": CONV(ABS(VAR(0))),
+    r"CONV(\x.TOP)": CONV(APP(K, TOP)),
+    r"CONV(\x.I)": CONV(APP(K, I)),
     # Two-argument functions
-    r"CONV(\x,y.x)": CONV(ABS(ABS(VAR(1)))),
-    r"CONV(\x,y.y)": CONV(ABS(ABS(VAR(0)))),
-    r"CONV(\x,y.x|y)": CONV(ABS(ABS(JOIN(VAR(0), VAR(1))))),
+    r"CONV(\x,y.x)": CONV(K),
+    r"CONV(\x,y.y)": CONV(KI),
+    r"CONV(\x,y.x|y)": CONV(J),
 }
 
 
@@ -203,9 +199,7 @@ SIMPLE_EXAMPLES = {
     "SIMPLE [= TOP": LEQ(SIMPLE, TOP),
     "BOT [= SIMPLE": LEQ(BOT, SIMPLE),
     "<I,I> [= SIMPLE": LEQ(TUPLE(I, I), SIMPLE),
-    r"<\f.\x.f, \f.f TOP> [= SIMPLE": LEQ(
-        TUPLE(ABS(ABS(VAR(1))), ABS(APP(VAR(0), TOP))), SIMPLE
-    ),
+    r"<\f.\x.f, \f.f TOP> [= SIMPLE": LEQ(TUPLE(K, APP(CI, TOP)), SIMPLE),
 }
 
 

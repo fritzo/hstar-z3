@@ -13,10 +13,9 @@ import logging
 from collections.abc import Callable, Iterable, Iterator
 
 import z3
-from z3 import And, ExprRef, ForAll, If, Implies, MultiPattern, Not, Or
+from z3 import And, ExprRef, ForAll, Implies, MultiPattern, Not, Or
 
 from .language import (
-    ABS,
     APP,
     BOT,
     CB,
@@ -27,14 +26,10 @@ from .language import (
     KI,
     LEQ,
     OFTYPE,
-    SHIFT,
     SIMPLE,
-    SUBST,
     TOP,
     TUPLE,
-    V_,
     VAR,
-    Y_,
     B,
     C,
     I,
@@ -49,6 +44,7 @@ from .language import (
     app,
     bool_,
     boool,
+    lam,
     semi,
     unit,
 )
@@ -62,88 +58,6 @@ v1 = VAR(1)
 f, g, h = z3.Consts("f g h", Term)
 r, s, t = z3.Consts("r s t", Term)
 x, y, z = z3.Consts("x y z", Term)
-
-
-def de_bruijn_theory() -> Iterator[ExprRef]:
-    """Theory of de Bruijn operations SHIFT and SUBST."""
-    i = z3.Int("i")
-    j = z3.Int("j")
-    body = z3.Const("body", Term)
-    lhs = z3.Const("lhs", Term)
-    rhs = z3.Const("rhs", Term)
-    start = z3.Int("start")
-    delta = z3.Int("delta")
-
-    # SHIFT axioms, deterministically executed forwards.
-    yield ForAll(
-        [i, start, delta],
-        SHIFT(VAR(i), start, delta) == VAR(If(i >= start, i + delta, i)),
-        patterns=[SHIFT(VAR(i), start, delta)],
-        qid="shift_var",
-    )
-    yield ForAll(
-        [x, start, delta],
-        SHIFT(ABS(x), start, delta) == ABS(SHIFT(x, start + 1, delta)),
-        patterns=[SHIFT(ABS(x), start, delta)],
-        qid="shift_abs",
-    )
-    yield ForAll(
-        [lhs, rhs, start, delta],
-        SHIFT(APP(lhs, rhs), start, delta)
-        == APP(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
-        patterns=[SHIFT(APP(lhs, rhs), start, delta)],
-        qid="shift_app",
-    )
-    yield ForAll(
-        [lhs, rhs, start, delta],
-        SHIFT(JOIN(lhs, rhs), start, delta)
-        == JOIN(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
-        patterns=[SHIFT(JOIN(lhs, rhs), start, delta)],
-        qid="shift_join",
-    )
-    yield ForAll(
-        [lhs, rhs, start, delta],
-        SHIFT(COMP(lhs, rhs), start, delta)
-        == COMP(SHIFT(lhs, start, delta), SHIFT(rhs, start, delta)),
-        patterns=[SHIFT(COMP(lhs, rhs), start, delta)],
-        qid="shift_comp",
-    )
-    yield ForAll([start, delta], SHIFT(TOP, start, delta) == TOP, qid="shift_top")
-    yield ForAll([start, delta], SHIFT(BOT, start, delta) == BOT, qid="shift_bot")
-
-    # SUBST axioms, deterministically executed forwards.
-    yield ForAll(
-        [j, i, x],
-        SUBST(i, x, VAR(j)) == If(j == i, x, VAR(j)),
-        patterns=[SUBST(i, x, VAR(j))],
-        qid="subst_var",
-    )
-    yield ForAll(
-        [body, i, x],
-        SUBST(i, x, ABS(body)) == ABS(SUBST(i + 1, SHIFT(x, 0, 1), body)),
-        patterns=[SUBST(i, x, ABS(body))],
-        qid="subst_abs",
-    )
-    yield ForAll(
-        [lhs, rhs, i, x],
-        SUBST(i, x, APP(lhs, rhs)) == APP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
-        patterns=[SUBST(i, x, APP(lhs, rhs))],
-        qid="subst_app",
-    )
-    yield ForAll(
-        [lhs, rhs, i, x],
-        SUBST(i, x, JOIN(lhs, rhs)) == JOIN(SUBST(i, x, lhs), SUBST(i, x, rhs)),
-        patterns=[SUBST(i, x, JOIN(lhs, rhs))],
-        qid="subst_join",
-    )
-    yield ForAll(
-        [lhs, rhs, i, x],
-        SUBST(i, x, COMP(lhs, rhs)) == COMP(SUBST(i, x, lhs), SUBST(i, x, rhs)),
-        patterns=[SUBST(i, x, COMP(lhs, rhs))],
-        qid="subst_comp",
-    )
-    yield ForAll([i, x], SUBST(i, x, TOP) == TOP, qid="subst_top")
-    yield ForAll([i, x], SUBST(i, x, BOT) == BOT, qid="subst_bot")
 
 
 # Theory of Scott ordering.
@@ -193,10 +107,44 @@ def order_theory() -> Iterator[ExprRef]:
     yield ForAll([x], JOIN(x, TOP) == TOP, qid="join_top")  # TOP absorbs
 
 
+def combinator_theory() -> Iterator[ExprRef]:
+    """Definitions of basic combinators."""
+    x = VAR(0)
+    y = VAR(1)
+    z = VAR(2)
+
+    # Basic combinators
+    yield I == lam(x, x)
+    yield K == lam(x, lam(y, x))
+    yield KI == lam(x, lam(y, y))
+    yield J == JOIN(K, KI)
+    yield B == lam(x, lam(y, lam(z, app(x, app(y, z)))))
+    yield C == lam(x, lam(y, lam(z, app(x, z, y))))
+    yield CI == lam(x, lam(y, app(y, x)))
+    yield CB == lam(x, lam(y, lam(z, app(y, app(x, z)))))
+    yield W == lam(x, lam(y, app(x, y, y)))
+    yield S == lam(x, lam(y, lam(z, app(x, z, app(y, z)))))
+
+    # Combinator equations
+    yield KI == app(K, I)
+    yield CB == app(C, B)
+    yield CI == app(C, I)
+    yield J == app(C, J)
+    yield I == app(W, J)
+
+    # Fixed points
+    lam_y_yy = lam(y, app(y, y))
+    lam_y_x_yy = lam(y, app(x, app(y, y)))
+    yield Y == lam(x, app(lam_y_yy, lam_y_yy))
+    yield Y == lam(x, app(lam_y_x_yy, lam_y_yy))
+    yield V == lam(x, app(Y, lam(y, JOIN(I, app(x, y)))))
+    yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
+    yield DIV == app(V, lam(x, app(x, TOP)))
+    # TODO define SIMPLE
+
+
 def lambda_theory() -> Iterator[ExprRef]:
     """Theory of lambda calculus and combinators."""
-    i = z3.Int("i")
-
     # Composition properties
     yield ForAll(
         [f, g, x],
@@ -242,15 +190,6 @@ def lambda_theory() -> Iterator[ExprRef]:
         ],
         qid="comp_mono_right",
     )
-
-    # Combinator equations
-    yield KI == app(K, I)
-    yield CB == app(C, B)
-    yield CI == app(C, I)
-    yield J == app(C, J)
-    yield I == app(W, J)
-    yield Y == Y_
-    yield V == V_
 
     # Beta reduction of combinators
     yield ForAll([x], app(BOT, x) == BOT, qid="beta_bot")
@@ -339,36 +278,6 @@ def lambda_theory() -> Iterator[ExprRef]:
     # Fixed point equations
     yield ForAll([y], (app(S, I, y) == y) == (y == Y), qid="siy")
 
-    # Beta reduction using Z3's SUBST
-    # The general pattern is lazy, but the BOT,TOP,VAR versions are eager.
-    yield ForAll(
-        [x, y],
-        APP(ABS(x), y) == SHIFT(SUBST(0, SHIFT(y, 0, 1), x), 0, -1),
-        patterns=[
-            MultiPattern(APP(ABS(x), y), SUBST(0, SHIFT(y, 0, 1), x)),
-            MultiPattern(ABS(x), SHIFT(SUBST(0, SHIFT(y, 0, 1), x), 0, -1)),
-        ],
-        qid="beta_abs",
-    )
-    yield ForAll(
-        [x],
-        APP(ABS(x), BOT) == SHIFT(SUBST(0, BOT, x), 0, -1),
-        patterns=[APP(ABS(x), BOT)],
-        qid="beta_abs_bot",
-    )
-    yield ForAll(
-        [x],
-        APP(ABS(x), TOP) == SHIFT(SUBST(0, TOP, x), 0, -1),
-        patterns=[APP(ABS(x), TOP)],
-        qid="beta_abs_top",
-    )
-    yield ForAll(
-        [x, i],
-        APP(ABS(x), VAR(i)) == SHIFT(SUBST(0, VAR(i + 1), x), 0, -1),
-        patterns=[APP(ABS(x), VAR(i))],
-        qid="beta_abs_var",
-    )
-
     # APP-JOIN distributivity (both directions)
     yield ForAll(
         [f, g, x],
@@ -408,42 +317,6 @@ def lambda_theory() -> Iterator[ExprRef]:
         ],
         qid="app_mono_arg",
     )
-
-    # ABS monotonicity
-    yield ForAll(
-        [x, y],
-        (ABS(x) == ABS(y)) == (x == y),
-        patterns=[
-            ABS(x) == ABS(y),
-            MultiPattern(ABS(x), ABS(y), x == y),
-        ],
-        qid="abs_inj",
-    )
-    yield ForAll(
-        [x, y],
-        LEQ(x, y) == LEQ(ABS(x), ABS(y)),
-        patterns=[MultiPattern(LEQ(x, y), ABS(x), ABS(y))],
-        qid="abs_mono",
-    )
-
-    # BOT/TOP preservation
-    yield ABS(BOT) == BOT
-    yield ABS(TOP) == TOP
-
-    # JOIN distributivity over ABS
-    yield ForAll(
-        [x, y],
-        ABS(JOIN(x, y)) == JOIN(ABS(x), ABS(y)),
-        patterns=[
-            MultiPattern(ABS(JOIN(x, y)), ABS(x), ABS(y)),
-            MultiPattern(JOIN(x, y), JOIN(ABS(x), ABS(y))),
-        ],
-        qid="abs_join_dist",
-    )
-
-    # Eta conversion
-    if not "FIXME":  # this proximally causes unsatisfiability
-        yield ForAll([f], ABS(APP(SHIFT(f, 0, 1), VAR(0))) == f, qid="eta_conv")
 
 
 # FIXME this theory hangs.
@@ -536,8 +409,6 @@ def closure_theory() -> Iterator[ExprRef]:
     # # Types are closures.
     yield ForAll([t], LEQ(I, APP(V, t)), qid="v_id")
     yield ForAll([t], COMP(APP(V, t), APP(V, t)) == APP(V, t), qid="v_comp")
-    yield V == ABS(APP(Y, ABS(JOIN(I, COMP(v1, v0)))))
-    yield V == ABS(APP(Y, ABS(JOIN(I, COMP(v0, v1)))))
 
     # TYPE is a type.
     yield LEQ(I, V)
@@ -586,8 +457,8 @@ def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
         counter["axioms"] += len(axioms)
         solver.add(*axioms)
 
-    add(de_bruijn_theory)
     add(order_theory)
+    add(combinator_theory)
     add(lambda_theory)
     if include_all:
         add(extensional_theory)
