@@ -134,7 +134,7 @@ parser.add_argument(
     help="Run Z3 in the current process",
 )
 parser.add_argument(
-    "--timeout-ms", type=int, default=5000, help="Solver timeout in milliseconds"
+    "--timeout-ms", type=int, default=30000, help="Solver timeout in milliseconds"
 )
 parser.add_argument(
     "--trace",

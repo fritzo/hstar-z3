@@ -65,6 +65,7 @@ x, y, z = z3.Consts("x y z", Term)
 def order_theory() -> Iterator[ExprRef]:
     """Theory of Scott ordering and join."""
     # Basic order axioms
+    yield Not(LEQ(TOP, BOT))
     yield ForAll([x], LEQ(x, TOP), qid="leq_top")
     yield ForAll([x], LEQ(BOT, x), qid="leq_bot")
     yield ForAll([x], LEQ(x, x), qid="leq_reflexive")
@@ -80,7 +81,6 @@ def order_theory() -> Iterator[ExprRef]:
         patterns=[MultiPattern(LEQ(x, y), LEQ(y, z), LEQ(x, z))],
         qid="leq_trans",
     )
-    yield Not(LEQ(TOP, BOT))
 
     # JOIN is least upper bound
     yield ForAll([x, y], LEQ(x, JOIN(x, y)), qid="leq_join")
@@ -144,6 +144,28 @@ def combinator_theory() -> Iterator[ExprRef]:
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
     # TODO define SIMPLE
+
+
+def closure_theory() -> Iterator[ExprRef]:
+    """Theory of types and type membership."""
+    # Types are closures.
+    yield ForAll(
+        [t],
+        LEQ(I, APP(V, t)),
+        qid="v_id",
+        patterns=[APP(V, t)],
+    )
+    yield ForAll(
+        [t],
+        COMP(APP(V, t), APP(V, t)) == APP(V, t),
+        patterns=[APP(V, t)],
+        qid="v_comp",
+    )
+
+    # TYPE is a type.
+    yield LEQ(I, V)
+    yield COMP(V, V) == V
+    yield APP(V, V) == V
 
 
 def lambda_theory() -> Iterator[ExprRef]:
@@ -340,18 +362,23 @@ def lambda_theory() -> Iterator[ExprRef]:
     )
 
 
-# FIXME this theory hangs.
 def extensional_theory() -> Iterator[ExprRef]:
     """Extensionality axioms of lambda calculus."""
     # These nested quantifiers are hopeless.
     yield ForAll(
         [f, g],
-        Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
+        Implies(
+            ForAll([x], APP(f, x) == APP(g, x)),
+            f == g,
+        ),
         qid="ext_eq",
     )
     yield ForAll(
         [f, g],
-        Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g)),
+        Implies(
+            ForAll([x], LEQ(APP(f, x), APP(g, x))),
+            LEQ(f, g),
+        ),
         qid="ext_leq",
     )
     yield ForAll(
@@ -361,54 +388,23 @@ def extensional_theory() -> Iterator[ExprRef]:
     )
     yield ForAll(
         [x, y],
-        Implies(ForAll([f], CONV(APP(f, x)) == CONV(APP(f, y))), x == y),
+        Implies(
+            ForAll([f], CONV(APP(f, x)) == CONV(APP(f, y))),
+            x == y,
+        ),
         qid="hstar_eq",
     )
     yield ForAll(
         [x, y],
-        Implies(ForAll([f], Implies(CONV(APP(f, y)) == CONV(APP(f, x)))), LEQ(x, y)),
+        Implies(
+            ForAll([f], Implies(CONV(APP(f, y)), CONV(APP(f, x)))),
+            LEQ(x, y),
+        ),
         qid="hstar_leq",
     )
 
 
-def hindley_axioms() -> Iterator[ExprRef]:
-    """Yields beta reduction axioms for combinators."""
-    yield ForAll([x], app(TOP, x) == TOP)
-    yield ForAll([x], app(BOT, x) == BOT)
-    yield ForAll([x], app(I, x) == x)
-    yield ForAll([x, y], app(K, x, y) == x)
-    yield ForAll([x, y], app(KI, x, y) == y)
-    yield ForAll([x, y], app(J, x, y) == JOIN(x, y))
-    yield ForAll([x, y], app(CI, x, y) == app(y, x))
-    yield ForAll([x, y], app(B, x, y) == COMP(x, y))
-    yield ForAll([x, y], app(CB, x, y) == COMP(y, x))
-    yield ForAll([x, y], app(W, x, y) == app(x, y, y))
-    yield ForAll([x, y, z], app(C, x, y, z) == app(x, z, y))
-    yield ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z)))
-    yield ForAll([x, y, z], app(COMP(x, y), z) == app(x, app(y, z)))
-    yield ForAll([x, y, z], app(JOIN(x, y), z) == JOIN(app(x, z), app(y, z)))
-    yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
-    yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
-    yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
-    yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
-
-
-def hindley_theory() -> Iterator[ExprRef]:
-    """
-    Hindley-style quantifier free equations for extensionality.
-
-    Returns the original list of universally quantified axioms.
-
-    1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
-    """
-    equations: set[ExprRef] = set()  # deduplicate
-    for axiom in hindley_axioms():
-        equations.update(QEHindley(axiom))
-    logger.info(f"Generated {len(equations)} Hindley equations")
-    yield from equations
-
-
-def simple_theory() -> Iterator[ExprRef]:
+def simple_theory(*, include_all: bool = False) -> Iterator[ExprRef]:
     """Theory of SIMPLE type, defined as join of section-retract pairs."""
 
     def above_all_sr(candidate: ExprRef) -> ExprRef:
@@ -426,37 +422,20 @@ def simple_theory() -> Iterator[ExprRef]:
     yield ForAll([x], Implies(above_all_sr(x), LEQ(SIMPLE, x)), qid="simple_least")
 
     # Inhabitation. These nested quantifiers are hopeless.
-    yield ForAll(
-        [t, x],
-        Implies(
-            ForAll(
-                [s, r],
-                Implies(LEQ(COMP(r, s), I), LEQ(app(t, s, r, x), x)),
-                qid="t_s_r_x",
+    if include_all:
+        yield ForAll(
+            [t, x],
+            Implies(
+                ForAll(
+                    [s, r],
+                    Implies(LEQ(COMP(r, s), I), LEQ(app(t, s, r, x), x)),
+                    qid="t_s_r_x",
+                ),
+                LEQ(app(SIMPLE, t, x), x),
             ),
-            LEQ(app(SIMPLE, t, x), x),
-        ),
-        patterns=[LEQ(app(SIMPLE, t, x), x)],
-        qid="simple_inhab",
-    )
-
-
-def closure_theory() -> Iterator[ExprRef]:
-    """Theory of types and type membership."""
-    # # Types are closures.
-    yield ForAll([t], LEQ(I, APP(V, t)), qid="v_id")
-    yield ForAll([t], COMP(APP(V, t), APP(V, t)) == APP(V, t), qid="v_comp")
-
-    # TYPE is a type.
-    yield LEQ(I, V)
-    yield COMP(V, V) == V
-    yield ForAll([t], APP(V, APP(V, t)) == APP(V, t), qid="v_idem")
-
-    # Inhabitants are fixed points.
-    yield OFTYPE(V, V)
-    yield ForAll([t], OFTYPE(APP(V, t), V), qid="type_of_type")
-    yield ForAll([t], APP(V, t) == JOIN(I, COMP(t, APP(V, t))), qid="v_join_left")
-    yield ForAll([t], APP(V, t) == JOIN(I, COMP(APP(V, t), t)), qid="v_join_right")
+            patterns=[LEQ(app(SIMPLE, t, x), x)],
+            qid="simple_inhab",
+        )
 
 
 def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:
@@ -481,6 +460,45 @@ def types_theory() -> Iterator[ExprRef]:
     ]
     logger.info(f"Generated {len(axioms)} type axioms")
     yield from axioms
+
+
+def hindley_axioms() -> Iterator[ExprRef]:
+    """Yields beta reduction axioms for combinators."""
+    yield ForAll([x], app(TOP, x) == TOP)
+    yield ForAll([x], app(BOT, x) == BOT)
+    yield ForAll([x], app(I, x) == x)
+    yield ForAll([x, y], app(K, x, y) == x)
+    yield ForAll([x, y], app(KI, x, y) == y)
+    yield ForAll([x, y], app(J, x, y) == JOIN(x, y))
+    yield ForAll([x, y], app(CI, x, y) == app(y, x))
+    yield ForAll([x, y], app(B, x, y) == COMP(x, y))
+    yield ForAll([x, y], app(CB, x, y) == COMP(y, x))
+    yield ForAll([x, y], app(W, x, y) == app(x, y, y))
+    yield ForAll([x, y, z], app(C, x, y, z) == app(x, z, y))
+    yield ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z)))
+    yield ForAll([x, y, z], app(COMP(x, y), z) == app(x, app(y, z)))
+    yield ForAll([x, y, z], app(JOIN(x, y), z) == JOIN(app(x, z), app(y, z)))
+    yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
+    yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
+    yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
+    yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
+
+
+# TODO bake this directly into add(), so that every ForAll in every theory is
+# compiled down to additional equations or inequalities.
+def hindley_theory() -> Iterator[ExprRef]:
+    """
+    Hindley-style quantifier free equations for extensionality.
+
+    Returns the original list of universally quantified axioms.
+
+    1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
+    """
+    equations: set[ExprRef] = set()  # deduplicate
+    for axiom in hindley_axioms():
+        equations.update(QEHindley(axiom))
+    logger.info(f"Generated {len(equations)} Hindley equations")
+    yield from equations
 
 
 def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
@@ -508,12 +526,12 @@ def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
 
     add(order_theory)
     add(combinator_theory)
+    add(closure_theory)
     add(lambda_theory)
+    add(simple_theory)
     if include_all:
         add(extensional_theory)
-        add(hindley_theory)
-        add(simple_theory)
-        add(closure_theory)
         add(types_theory)
+        add(hindley_theory)
 
     logger.info(f"Solver statistics:\n{solver.statistics()}")
