@@ -21,6 +21,7 @@ from .language import (
     CB,
     CI,
     COMP,
+    CONV,
     DIV,
     JOIN,
     KI,
@@ -127,6 +128,7 @@ def combinator_theory() -> Iterator[ExprRef]:
 
     # Combinator equations
     yield KI == app(K, I)
+    yield KI == app(C, K)
     yield CB == app(C, B)
     yield CI == app(C, I)
     yield J == app(C, J)
@@ -137,6 +139,7 @@ def combinator_theory() -> Iterator[ExprRef]:
     lam_y_x_yy = lam(y, app(x, app(y, y)))
     yield Y == lam(x, app(lam_y_yy, lam_y_yy))
     yield Y == lam(x, app(lam_y_x_yy, lam_y_yy))
+    yield Y == app(S, I, Y)
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(x, y)))))
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
@@ -274,9 +277,27 @@ def lambda_theory() -> Iterator[ExprRef]:
         # patterns=[app(Y, f)],
         qid="beta_y",
     )
+    yield ForAll(
+        [x],
+        app(V, x) == JOIN(I, COMP(x, app(V, x))),
+        patterns=[COMP(x, app(Y, x))],
+        qid="beta_v_left",
+    )
+    yield ForAll(
+        [x],
+        app(V, x) == JOIN(I, COMP(app(V, x), x)),
+        patterns=[COMP(app(Y, x), x)],
+        qid="beta_v_right",
+    )
+    yield ForAll(
+        [x],
+        app(DIV, x) == JOIN(x, app(DIV, x, TOP)),
+        patterns=[app(DIV, x, TOP)],
+        qid="beta_div",
+    )
 
-    # Fixed point equations
-    yield ForAll([y], (app(S, I, y) == y) == (y == Y), qid="siy")
+    # Fixed point identification
+    yield ForAll([y], Implies(app(S, I, y) == y, y == Y), qid="siy")
 
     # APP-JOIN distributivity (both directions)
     yield ForAll(
@@ -326,12 +347,27 @@ def extensional_theory() -> Iterator[ExprRef]:
     yield ForAll(
         [f, g],
         Implies(ForAll([x], APP(f, x) == APP(g, x)), f == g),
-        qid="ext_app",
+        qid="ext_eq",
     )
     yield ForAll(
         [f, g],
         Implies(ForAll([x], LEQ(APP(f, x), APP(g, x))), LEQ(f, g)),
         qid="ext_leq",
+    )
+    yield ForAll(
+        [x],
+        CONV(x) == Or(x == TOP, CONV(APP(x, TOP))),
+        qid="conv_fix",
+    )
+    yield ForAll(
+        [x, y],
+        Implies(ForAll([f], CONV(APP(f, x)) == CONV(APP(f, y))), x == y),
+        qid="hstar_eq",
+    )
+    yield ForAll(
+        [x, y],
+        Implies(ForAll([f], Implies(CONV(APP(f, y)) == CONV(APP(f, x)))), LEQ(x, y)),
+        qid="hstar_leq",
     )
 
 
@@ -354,6 +390,7 @@ def hindley_axioms() -> Iterator[ExprRef]:
     yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
     yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
     yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
+    yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
 
 
 def hindley_theory() -> Iterator[ExprRef]:
