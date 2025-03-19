@@ -484,7 +484,12 @@ def hindley_axioms() -> Iterator[ExprRef]:
     yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
 
 
-def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
+def add_theory(
+    solver: z3.Solver,
+    *,
+    unsat_core: bool = True,
+    include_all: bool = False,
+) -> None:
     """Add all theories to the solver."""
     counter["add_theory"] += 1
     seen: set[ExprRef] = set()
@@ -495,6 +500,14 @@ def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
         name = theory.__name__.replace("_theory", "")
         counter[name + "_axioms"] += len(axioms)
         counter["axioms"] += len(axioms)
+        seen.update(axioms)
+
+        # Group Hindley equations by prefix.
+        prefixes: dict[ExprRef, str] = {}
+        for ax in axioms:
+            if z3.is_quantifier(ax) and ax.is_forall():
+                if qid := ax.qid():
+                    prefixes[ax] = qid + ": "
 
         # Generate Hindley equations for the axioms.
         for ax in list(axioms):
@@ -502,18 +515,23 @@ def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
             counter[name + "_equations"] += len(equations)
             counter["equations"] += len(equations)
             axioms.update(equations)
+            if ax in prefixes:
+                for eq in equations:
+                    prefixes[eq] = prefixes[ax]
+        seen.update(axioms)
+
+        if not unsat_core:
+            solver.add(*axioms)
+            return
 
         # Add named axioms to the solver.
-        # This uses assert_and_track to support unsat_core
+        # This uses assert_and_track to support unsat_core.
+        # Note assert_and_track is absent from solver.assertions(), so profiling
+        # requires unsat_core=False.
         for ax in axioms:
-            name = ""
-            if z3.is_quantifier(ax) and ax.is_forall():
-                name = ax.qid()
-            if not name:
-                name = str(ax)
+            name = prefixes.get(ax, "") + str(ax)
             name = " ".join(name.split())
             solver.assert_and_track(ax, name)
-            seen.add(ax)
 
     add(order_theory)
     add(combinator_theory)

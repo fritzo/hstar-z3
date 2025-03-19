@@ -327,6 +327,7 @@ def QEHindley(formula: ExprRef) -> set[ExprRef]:
         return equations
     body = formula.body()
     if not z3.is_eq(body):
+        # TODO support LEQ(lhs, rhs)
         return equations
     lhs, rhs = body.children()
     if not lhs.sort() == Term or not rhs.sort() == Term:

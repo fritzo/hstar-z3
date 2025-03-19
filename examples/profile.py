@@ -72,7 +72,7 @@ def main(args: argparse.Namespace) -> None:
     logger.info(f"Running Z3 theory check (timeout: {args.timeout_ms}ms)")
 
     start = time.time()
-    add_theory(solver)
+    add_theory(solver, unsat_core=not args.subprocess)
     add_custom(solver)
     theory_time = time.time() - start
     logger.info(f"Theory added in {theory_time:.2f}s")
