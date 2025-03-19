@@ -137,8 +137,8 @@ def combinator_theory() -> Iterator[ExprRef]:
     # Fixed points
     lam_y_yy = lam(y, app(y, y))
     lam_y_x_yy = lam(y, app(x, app(y, y)))
-    yield Y == lam(x, app(lam_y_yy, lam_y_yy))
-    yield Y == lam(x, app(lam_y_x_yy, lam_y_yy))
+    yield Y == lam(x, app(lam_y_yy, lam_y_x_yy))
+    yield Y == lam(x, app(lam_y_x_yy, lam_y_x_yy))
     yield Y == app(S, I, Y)
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(x, y)))))
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
