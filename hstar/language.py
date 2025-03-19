@@ -310,22 +310,33 @@ def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
             yield expr3
 
 
-def QEHindley(expr: ExprRef) -> set[ExprRef]:
+def QEHindley(formula: ExprRef) -> set[ExprRef]:
     """
     Converts a z3.ForAll formula into a set of closed formulas.
 
     This eliminates the quantifiers using Hindley's extensionality trick [1] and
     a Curry-style combinatory abstraction algorithm.
 
-    Warning: none of the vs may appear inside ABS(-) terms.
-
     [1] Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
-    result: set[ExprRef] = set()
-    for derived in iter_closures(expr.body()):
-        assert z3.is_eq(derived)
-        lhs, rhs = derived.children()
+    assert formula.sort() == z3.BoolSort()
+
+    # Check whether the formula is a quantified equality.
+    equations: set[ExprRef] = set()
+    if not z3.is_quantifier(formula) or not formula.is_forall():
+        return equations
+    body = formula.body()
+    if not z3.is_eq(body):
+        return equations
+    lhs, rhs = body.children()
+    if not lhs.sort() == Term or not rhs.sort() == Term:
+        return equations
+
+    # Convert to a unique set of equations.
+    for equation in iter_closures(body):
+        assert z3.is_eq(equation)
+        lhs, rhs = equation.children()
         if z3.eq(lhs, rhs):
             continue  # Skip trivial equalities.
-        result.add(derived)
-    return result
+        equations.add(equation)
+    return equations

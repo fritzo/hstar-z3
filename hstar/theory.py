@@ -463,7 +463,7 @@ def types_theory() -> Iterator[ExprRef]:
 
 
 def hindley_axioms() -> Iterator[ExprRef]:
-    """Yields beta reduction axioms for combinators."""
+    """For testing only."""
     yield ForAll([x], app(TOP, x) == TOP)
     yield ForAll([x], app(BOT, x) == BOT)
     yield ForAll([x], app(I, x) == x)
@@ -484,37 +484,28 @@ def hindley_axioms() -> Iterator[ExprRef]:
     yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
 
 
-# TODO bake this directly into add(), so that every ForAll in every theory is
-# compiled down to additional equations or inequalities.
-def hindley_theory() -> Iterator[ExprRef]:
-    """
-    Hindley-style quantifier free equations for extensionality.
-
-    Returns the original list of universally quantified axioms.
-
-    1. Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
-    """
-    equations: set[ExprRef] = set()  # deduplicate
-    for axiom in hindley_axioms():
-        equations.update(QEHindley(axiom))
-    logger.info(f"Generated {len(equations)} Hindley equations")
-    yield from equations
-
-
 def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
     """Add all theories to the solver."""
     counter["add_theory"] += 1
     seen: set[ExprRef] = set()
 
     def add(theory: Callable[[], Iterable[ExprRef]]) -> None:
-        axioms = list(theory())
+        # Generate axioms from the theory.
+        axioms = set(theory()) - seen
         name = theory.__name__.replace("_theory", "")
         counter[name + "_axioms"] += len(axioms)
         counter["axioms"] += len(axioms)
+
+        # Generate Hindley equations for the axioms.
+        for ax in list(axioms):
+            equations = QEHindley(ax) - axioms - seen
+            counter[name + "_equations"] += len(equations)
+            counter["equations"] += len(equations)
+            axioms.update(equations)
+
+        # Add named axioms to the solver.
+        # This uses assert_and_track to support unsat_core
         for ax in axioms:
-            if ax in seen:
-                continue
-            # Use assert_and_track to support unsat_core
             name = ""
             if z3.is_quantifier(ax) and ax.is_forall():
                 name = ax.qid()
@@ -532,6 +523,5 @@ def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
     if include_all:
         add(extensional_theory)
         add(types_theory)
-        add(hindley_theory)
 
     logger.info(f"Solver statistics:\n{solver.statistics()}")
