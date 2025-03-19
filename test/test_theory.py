@@ -68,6 +68,19 @@ def solver(base_solver: z3.Solver) -> Iterator[z3.Solver]:
         yield base_solver
 
 
+def test_unsat_core() -> None:
+    """Check that our theories are consistent by trying to prove False."""
+    solver = z3.Solver()
+    solver.set("unsat_core", True)
+    x = z3.Const("x", z3.IntSort())
+    solver.assert_and_track(x < x, "inferiority")
+    result = solver.check()
+    if result == z3.unsat:
+        core = solver.unsat_core()
+        logger.info(f"Unsat core:\n{core}")
+    assert result == z3.unsat
+
+
 def test_consistency(solver: z3.Solver) -> None:
     """Check that our theories are consistent by trying to prove False."""
     with solver, solver_timeout(solver, timeout_ms=1000):

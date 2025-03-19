@@ -486,13 +486,25 @@ def types_theory() -> Iterator[ExprRef]:
 def add_theory(solver: z3.Solver, *, include_all: bool = False) -> None:
     """Add all theories to the solver."""
     counter["add_theory"] += 1
+    seen: set[ExprRef] = set()
 
     def add(theory: Callable[[], Iterable[ExprRef]]) -> None:
         axioms = list(theory())
         name = theory.__name__.replace("_theory", "")
         counter[name + "_axioms"] += len(axioms)
         counter["axioms"] += len(axioms)
-        solver.add(*axioms)
+        for ax in axioms:
+            if ax in seen:
+                continue
+            # Use assert_and_track to support unsat_core
+            name = ""
+            if z3.is_quantifier(ax) and ax.is_forall():
+                name = ax.qid()
+            if not name:
+                name = str(ax)
+            name = " ".join(name.split())
+            solver.assert_and_track(ax, name)
+            seen.add(ax)
 
     add(order_theory)
     add(combinator_theory)
