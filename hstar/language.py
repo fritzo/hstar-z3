@@ -243,8 +243,8 @@ def existential_closure(expr: ExprRef) -> ExprRef:
         return expr
     subs: list[tuple[ExprRef, ExprRef]] = []
     holes: list[ExprRef] = []
-    for i, var in enumerate(free_vars(expr)):
-        hole = z3.Const(f"hole_{i}", Term)
+    for var in free_vars(expr):
+        hole = z3.FreshConst(Term, prefix="hole")
         holes.append(hole)
         subs.append((var, hole))
     return z3.Exists(holes, z3.substitute(expr, *subs))
