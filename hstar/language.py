@@ -37,26 +37,10 @@ LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())  # x [= y
 
 # Lambda calculus tools: variables and abstraction.
 
-_VAR_INDEX: dict[ExprRef, int] = {}
-
 
 @functools.cache
 def VAR(i: int) -> ExprRef:
-    result = intern(z3.Var(i, Term))
-    _VAR_INDEX[result] = i
-    return result
-
-
-def var_index(var: ExprRef) -> int:
-    """Returns the index of a z3.Var"""
-    assert z3.is_var(var)
-    result = _VAR_INDEX.get(var, None)
-    if result is not None:
-        return result
-    for i in range(1000):
-        if z3.eq(VAR(i), var):  # populates _VAR_INDEX
-            return i
-    raise RuntimeError("Failed to find index of variable {var}")
+    return intern(z3.Var(i, Term))
 
 
 _EMPTY_VARS: frozenset[ExprRef] = frozenset()

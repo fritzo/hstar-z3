@@ -49,7 +49,7 @@ def nf_to_z3(term: normal.Term) -> z3.ExprRef:
 
 def _z3_unshift(term: z3.ExprRef) -> z3.ExprRef:
     subs = [
-        (v, language.VAR(language.var_index(v) - 1)) for v in language.free_vars(term)
+        (v, language.VAR(z3.get_var_index(v) - 1)) for v in language.free_vars(term)
     ]
     if subs:
         term = z3.substitute(term, *subs)
@@ -142,7 +142,7 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
 
     if z3.is_var(term):
         # Handle VAR constructor
-        idx = language.var_index(term)
+        idx = z3.get_var_index(term)
         return normal.VAR(idx)
 
     if z3.is_app(term):
