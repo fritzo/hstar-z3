@@ -51,11 +51,16 @@ class Synthesizer:
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
+        constraint = language.existential_closure(constraint)
         valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
         if valid is True and not candidate.free_vars:
             logger.info(f"Found solution: {candidate}")
+        if valid is False:
+            logger.debug(f"Rejected: {candidate}")
         if valid is not None:
             self.refiner.mark_valid(candidate, valid)
+            # TODO extract witness from existential constraints
+            self.solver.add(constraint if valid else z3.Not(constraint))
         return candidate, valid
 
 
@@ -92,6 +97,7 @@ class EnvSynthesizer:
         valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
         if valid is not None:
             self.refiner.mark_valid(candidate, valid)
+            self.solver.add(constraint if valid else z3.Not(constraint))
         return candidate, valid
 
 

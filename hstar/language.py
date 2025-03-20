@@ -253,6 +253,19 @@ def OFTYPE(x: ExprRef, t: ExprRef) -> ExprRef:
     return LEQ(APP(t, x), x)
 
 
+def existential_closure(expr: ExprRef) -> ExprRef:
+    """Existentially close a term over its free variables."""
+    if not free_vars(expr):
+        return expr
+    subs: list[tuple[ExprRef, ExprRef]] = []
+    holes: list[ExprRef] = []
+    for i, var in enumerate(free_vars(expr)):
+        hole = z3.Const(f"hole_{i}", Term)
+        holes.append(hole)
+        subs.append((var, hole))
+    return z3.Exists(holes, z3.substitute(expr, *subs))
+
+
 def iter_eta_substitutions(
     expr: ExprRef, *, compose: bool = False
 ) -> Iterator[ExprRef]:

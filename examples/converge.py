@@ -7,13 +7,17 @@ that are provably convergent, until interrupted by the user.
 """
 
 import argparse
+import logging
 
 import z3
 
 from hstar.bridge import nf_to_z3
 from hstar.language import CONV
+from hstar.logging import setup_color_logging
 from hstar.normal import VAR, Term
 from hstar.synthesis import Synthesizer
+
+setup_color_logging(level=logging.DEBUG)
 
 
 def main(args: argparse.Namespace) -> None:
@@ -41,7 +45,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--timeout-ms",
     type=int,
-    default=100,
+    default=1000,
     help="Timeout for each Z3 invocation in milliseconds",
 )
 

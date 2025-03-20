@@ -7,6 +7,7 @@ constructor defined as: SIMPLE = ⨆ { <r,s> | s ◦ r ⊑ I }
 """
 
 import argparse
+import logging
 
 import z3
 
@@ -14,13 +15,16 @@ from hstar import normal
 from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
 from hstar.language import SIMPLE
+from hstar.logging import setup_color_logging
 from hstar.synthesis import Synthesizer
+
+setup_color_logging(level=logging.DEBUG)
 
 
 def main(args: argparse.Namespace) -> None:
     I = to_ast(lambda x: x)
     Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
-    DIV = Y(lambda div, x: x | div(x(TOP)))
+    DIV = Y(lambda div, x: x | div(x, TOP))
     raise_ = to_ast(lambda x, _: x)
     lower = to_ast(lambda x: x(TOP))
     pull = to_ast(lambda x, y: x | DIV(y))
