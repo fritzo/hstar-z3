@@ -31,8 +31,11 @@ TOP, BOT = z3.Consts("TOP BOT", Term)
 I, K, KI, J, B, C, CI, CB = z3.Consts("I K KI J B C CI CB", Term)
 W, S, Y, V, DIV, SIMPLE = z3.Consts("W S Y V DIV SIMPLE", Term)
 
-# Scott ordering.
-LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())  # x [= y
+# Scott ordering x [= y.
+if LEQ_IS_Z3_PARTIAL_ORDER := True:
+    LEQ = z3.PartialOrder(Term, 0)
+else:
+    LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())
 
 
 # Lambda calculus tools: variables and abstraction.

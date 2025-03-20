@@ -26,6 +26,7 @@ from .language import (
     JOIN,
     KI,
     LEQ,
+    LEQ_IS_Z3_PARTIAL_ORDER,
     OFTYPE,
     SIMPLE,
     TOP,
@@ -68,19 +69,20 @@ def order_theory() -> Iterator[ExprRef]:
     yield Not(LEQ(TOP, BOT))
     yield ForAll([x], LEQ(x, TOP), qid="leq_top")
     yield ForAll([x], LEQ(BOT, x), qid="leq_bot")
-    yield ForAll([x], LEQ(x, x), qid="leq_reflexive")
-    yield ForAll(
-        [x, y],
-        And(LEQ(x, y), LEQ(y, x)) == (x == y),
-        patterns=[MultiPattern(LEQ(x, y), LEQ(y, x))],
-        qid="leq_antisym",
-    )
-    yield ForAll(
-        [x, y, z],
-        Implies(And(LEQ(x, y), LEQ(y, z)), LEQ(x, z)),
-        patterns=[MultiPattern(LEQ(x, y), LEQ(y, z), LEQ(x, z))],
-        qid="leq_trans",
-    )
+    if not LEQ_IS_Z3_PARTIAL_ORDER:
+        yield ForAll([x], LEQ(x, x), qid="leq_reflexive")
+        yield ForAll(
+            [x, y],
+            And(LEQ(x, y), LEQ(y, x)) == (x == y),
+            patterns=[MultiPattern(LEQ(x, y), LEQ(y, x))],
+            qid="leq_antisym",
+        )
+        yield ForAll(
+            [x, y, z],
+            Implies(And(LEQ(x, y), LEQ(y, z)), LEQ(x, z)),
+            patterns=[MultiPattern(LEQ(x, y), LEQ(y, z), LEQ(x, z))],
+            qid="leq_trans",
+        )
 
     # JOIN is least upper bound
     yield ForAll([x, y], LEQ(x, JOIN(x, y)), qid="leq_join")

@@ -272,7 +272,7 @@ def test_types(solver: z3.Solver, formula: z3.ExprRef) -> None:
 
 def test_find_counterexample_1(solver: z3.Solver) -> None:
     # Case 1: Valid formula - should return (True, None)
-    formula = ForAll([x], LEQ(x, TOP))  # x [= TOP is always true
+    formula = ForAll([x], LEQ(x, x))  # x [= x is always true
     result, counter = find_counterexample(solver, formula, x, timeout_ms=1000)
     assert result is True
     assert counter is None
