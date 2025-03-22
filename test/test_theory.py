@@ -305,3 +305,28 @@ def test_find_counterexample_3(solver: z3.Solver) -> None:
     # We expect either None (timeout) or True (solved)
     assert result is None or result is True
     assert result is None or counter is None
+
+
+def test_hand_partial_order() -> None:
+    T = z3.DeclareSort("T")
+    Less = z3.Function("Less", T, T, z3.BoolSort())
+    Bot, x, y, z = z3.Consts("Bot x y z", T)
+    solver = z3.Solver()
+
+    # Reflexivity, antisymmetry, transitivity
+    solver.add(ForAll([x], Less(x, x)))
+    solver.add(ForAll([x, y], Implies(Less(x, y), Implies(Less(y, x), x == y))))
+    solver.add(ForAll([x, y, z], Implies(Less(x, y), Implies(Less(y, z), Less(x, z)))))
+
+    solver.add(ForAll([x], Less(Bot, x)))
+    assert solver.check(Less(Bot, x)) == z3.sat
+
+
+@pytest.mark.xfail(reason="https://github.com/Z3Prover/z3/issues/7592", run=False)
+def test_builtin_partial_order() -> None:
+    T = z3.DeclareSort("T")
+    Less = z3.PartialOrder(T, 0)
+    Bot, x = z3.Consts("Bot x", T)
+    solver = z3.Solver()
+    solver.add(ForAll([x], Less(Bot, x)))
+    assert solver.check(Less(Bot, x)) == z3.sat

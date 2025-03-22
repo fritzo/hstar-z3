@@ -62,6 +62,71 @@ r, s, t = z3.Consts("r s t", Term)
 x, y, z = z3.Consts("x y z", Term)
 
 
+def partial_order_v1(leq: Callable[[ExprRef, ExprRef], ExprRef]) -> Iterator[ExprRef]:
+    """Generic theory of a partial order."""
+    yield ForAll([x], leq(x, x), qid="leq_reflexive")
+    yield ForAll(
+        [x, y],
+        And(leq(x, y), leq(y, x)) == (x == y),
+        patterns=[MultiPattern(leq(x, y), leq(y, x))],
+        qid="leq_antisym",
+    )
+    yield ForAll(
+        [x, y, z],
+        Implies(And(leq(x, y), leq(y, z)), leq(x, z)),
+        patterns=[MultiPattern(leq(x, y), leq(y, z), leq(x, z))],
+        qid="leq_trans",
+    )
+
+
+def partial_order_v2(leq: Callable[[ExprRef, ExprRef], ExprRef]) -> Iterator[ExprRef]:
+    """Generic theory of a partial order."""
+    # Adapted from
+    # https://github.com/Z3Prover/z3/blob/master/src/tactic/core/special_relations_tactic.cpp
+    # by adding patterns.
+    yield ForAll(
+        [x],
+        leq(x, x),
+        patterns=[leq(x, x)],
+        qid="leq_reflexive",
+    )
+    yield ForAll(
+        [x, y, z],
+        Or(Not(leq(x, y)), Not(leq(y, z)), leq(x, z)),
+        patterns=[
+            MultiPattern(leq(x, y), leq(y, z)),
+            MultiPattern(leq(x, y), leq(x, z)),
+            MultiPattern(leq(y, z), leq(x, z)),
+        ],
+        qid="leq_trans_or",
+    )
+    yield ForAll(
+        [x, y, z],
+        Or(Not(And(leq(x, y), leq(y, z))), leq(x, z)),
+        patterns=[
+            MultiPattern(leq(x, y), leq(y, z)),
+            MultiPattern(leq(x, y), leq(x, z)),
+            MultiPattern(leq(y, z), leq(x, z)),
+        ],
+        qid="leq_trans_and",
+    )
+    yield ForAll(
+        [x, y],
+        Or(Not(leq(x, y)), Not(leq(y, x)), x == y),
+        patterns=[MultiPattern(leq(x, y), leq(y, x))],
+        qid="leq_antisym_or",
+    )
+    yield ForAll(
+        [x, y],
+        Or(Not(And(leq(x, y), leq(y, x))), x == y),
+        patterns=[MultiPattern(leq(x, y), leq(y, x))],
+        qid="leq_antisym_and",
+    )
+
+
+partial_order = partial_order_v2
+
+
 # Theory of Scott ordering.
 def order_theory() -> Iterator[ExprRef]:
     """Theory of Scott ordering and join."""
@@ -70,19 +135,7 @@ def order_theory() -> Iterator[ExprRef]:
     yield ForAll([x], LEQ(x, TOP), qid="leq_top")
     yield ForAll([x], LEQ(BOT, x), qid="leq_bot")
     if not LEQ_IS_Z3_PARTIAL_ORDER:
-        yield ForAll([x], LEQ(x, x), qid="leq_reflexive")
-        yield ForAll(
-            [x, y],
-            And(LEQ(x, y), LEQ(y, x)) == (x == y),
-            patterns=[MultiPattern(LEQ(x, y), LEQ(y, x))],
-            qid="leq_antisym",
-        )
-        yield ForAll(
-            [x, y, z],
-            Implies(And(LEQ(x, y), LEQ(y, z)), LEQ(x, z)),
-            patterns=[MultiPattern(LEQ(x, y), LEQ(y, z), LEQ(x, z))],
-            qid="leq_trans",
-        )
+        yield from partial_order(LEQ)
 
     # JOIN is least upper bound
     yield ForAll([x, y], LEQ(x, JOIN(x, y)), qid="leq_join")

@@ -32,7 +32,7 @@ I, K, KI, J, B, C, CI, CB = z3.Consts("I K KI J B C CI CB", Term)
 W, S, Y, V, DIV, SIMPLE = z3.Consts("W S Y V DIV SIMPLE", Term)
 
 # Scott ordering x [= y.
-if LEQ_IS_Z3_PARTIAL_ORDER := True:
+if LEQ_IS_Z3_PARTIAL_ORDER := False:  # https://github.com/Z3Prover/z3/issues/7592
     LEQ = z3.PartialOrder(Term, 0)
 else:
     LEQ = z3.Function("LEQ", Term, Term, z3.BoolSort())
