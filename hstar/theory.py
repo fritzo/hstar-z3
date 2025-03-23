@@ -9,6 +9,7 @@ The theory includes de Bruijn syntax, Scott ordering, λ-calculus, and
 types-as-closures.
 """
 
+import functools
 import logging
 from collections.abc import Callable, Iterable, Iterator
 
@@ -530,76 +531,39 @@ def types_theory() -> Iterator[ExprRef]:
     yield from axioms
 
 
-def hindley_axioms() -> Iterator[ExprRef]:
-    """For testing only."""
-    yield ForAll([x], app(TOP, x) == TOP)
-    yield ForAll([x], app(BOT, x) == BOT)
-    yield ForAll([x], app(I, x) == x)
-    yield ForAll([x, y], app(K, x, y) == x)
-    yield ForAll([x, y], app(KI, x, y) == y)
-    yield ForAll([x, y], app(J, x, y) == JOIN(x, y))
-    yield ForAll([x, y], app(CI, x, y) == app(y, x))
-    yield ForAll([x, y], app(B, x, y) == COMP(x, y))
-    yield ForAll([x, y], app(CB, x, y) == COMP(y, x))
-    yield ForAll([x, y], app(W, x, y) == app(x, y, y))
-    yield ForAll([x, y, z], app(C, x, y, z) == app(x, z, y))
-    yield ForAll([x, y, z], app(S, x, y, z) == app(x, z, app(y, z)))
-    yield ForAll([x, y, z], app(COMP(x, y), z) == app(x, app(y, z)))
-    yield ForAll([x, y, z], app(JOIN(x, y), z) == JOIN(app(x, z), app(y, z)))
-    yield ForAll([f], app(Y, f) == app(f, app(Y, f)))
-    yield ForAll([f], app(V, f) == JOIN(I, COMP(f, app(V, f))))
-    yield ForAll([f], app(V, f) == JOIN(I, COMP(app(V, f), f)))
-    yield ForAll([f], app(DIV, f) == JOIN(f, app(DIV, f, TOP)))
-
-
-def add_theory(
-    solver: z3.Solver,
-    *,
-    unsat_core: bool = True,
-    include_all: bool = False,
-) -> None:
-    """Add all theories to the solver."""
+@functools.cache
+def get_theory(*, include_all: bool = False) -> tuple[tuple[str, ExprRef], ...]:
+    """Get the entire default theory."""
     counter["add_theory"] += 1
+    result: list[tuple[str, ExprRef]] = []
     seen: set[ExprRef] = set()
+    ax_count = 0
+    eq_count = 0
+
+    def order(eq: ExprRef) -> tuple[int, str]:
+        s = str(eq)
+        return len(s), s
 
     def add(theory: Callable[[], Iterable[ExprRef]]) -> None:
-        # Generate axioms from the theory.
-        axioms = set(theory()) - seen
-        name = theory.__name__.replace("_theory", "")
-        counter[name + "_axioms"] += len(axioms)
-        counter["axioms"] += len(axioms)
-        seen.update(axioms)
+        nonlocal ax_count, eq_count
+        for axiom in theory():
+            if axiom in seen:
+                continue
+            ax_count += 1
+            prefix = ""
+            if z3.is_quantifier(axiom) and axiom.is_forall():
+                if qid := axiom.qid():
+                    prefix = qid + ": "
+            result.append((prefix + str(axiom), axiom))
+            seen.add(axiom)
 
-        # Group Hindley equations by prefix.
-        prefixes: dict[ExprRef, str] = {}
-        for ax in axioms:
-            if z3.is_quantifier(ax) and ax.is_forall():
-                if qid := ax.qid():
-                    prefixes[ax] = qid + ": "
-
-        # Generate Hindley equations for the axioms.
-        for ax in list(axioms):
-            equations = QEHindley(ax) - axioms - seen
-            counter[name + "_equations"] += len(equations)
-            counter["equations"] += len(equations)
-            axioms.update(equations)
-            if ax in prefixes:
-                for eq in equations:
-                    prefixes[eq] = prefixes[ax]
-        seen.update(axioms)
-
-        if not unsat_core:
-            solver.add(*axioms)
-            return
-
-        # Add named axioms to the solver.
-        # This uses assert_and_track to support unsat_core.
-        # Note assert_and_track is absent from solver.assertions(), so profiling
-        # requires unsat_core=False.
-        for ax in axioms:
-            name = prefixes.get(ax, "") + str(ax)
-            name = " ".join(name.split())
-            solver.assert_and_track(ax, name)
+            # Add Hindley equations.
+            equations = sorted(QEHindley(axiom) - seen, key=order)
+            ax_count += len(equations)
+            eq_count += len(equations)
+            seen.update(equations)
+            for eq in equations:
+                result.append((prefix + str(eq), eq))
 
     add(order_theory)
     add(combinator_theory)
@@ -610,4 +574,27 @@ def add_theory(
         add(extensional_theory)
         add(types_theory)
 
+    counter["axioms"] = max(counter["axioms"], ax_count)
+    counter["equations"] = max(counter["equations"], eq_count)
+    return tuple(result)
+
+
+def add_theory(
+    solver: z3.Solver,
+    *,
+    unsat_core: bool = True,
+    include_all: bool = False,
+) -> None:
+    """Add all theories to the solver."""
+    counter["add_theory"] += 1
+    logger.info("Initializing theory")
+    for name, axiom in get_theory(include_all=include_all):
+        if unsat_core:
+            # Add named axiom to the solver.
+            # This uses assert_and_track to support unsat_core.
+            # Note assert_and_track is absent from solver.assertions(), so profiling
+            # requires unsat_core=False.
+            solver.assert_and_track(axiom, name)
+        else:
+            solver.add(axiom)
     logger.info(f"Solver statistics:\n{solver.statistics()}")

@@ -28,7 +28,7 @@ from hstar.language import (
     iter_eta_substitutions,
     lam,
 )
-from hstar.theory import hindley_axioms
+from hstar.theory import get_theory
 
 logger = logging.getLogger(__name__)
 
@@ -260,15 +260,15 @@ def test_qe_hindley_count() -> None:
     assert len(actual) == 134
 
 
-HINDLEY_AXIOMS = list(hindley_axioms())
-HINDLEY_IDS = [" ".join(str(x).split()) for x in HINDLEY_AXIOMS]
+HINDLEY_AXIOMS = [
+    ax for _, ax in get_theory() if z3.is_quantifier(ax) if ax.is_forall()
+]
+HINDLEY_IDS = ["".join(str(x).split()) for x in HINDLEY_AXIOMS]
 
 
 @pytest.mark.parametrize("axiom", HINDLEY_AXIOMS, ids=HINDLEY_IDS)
 def test_qe_hindley(axiom: z3.ExprRef) -> None:
-    equations = list(QEHindley(axiom))
-    assert equations
-    for e in equations:
+    for e in QEHindley(axiom):
         assert z3.is_eq(e)
         assert not free_vars(e)
         lhs, rhs = e.children()
