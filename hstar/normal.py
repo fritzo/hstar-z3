@@ -18,6 +18,8 @@ The following eager linear reductions are applied during term construction:
 - Lambda/abstraction reductions ABS(...):
   - ABS(TOP) → TOP (abstraction over TOP is TOP)
   - ABS(BOT) → BOT (abstraction over BOT is BOT)
+  - ABS(APP(lhs), VAR(0)) -> shift(lhs, delta=-1)
+    if VAR(0) does not occur in lhs. (η-conversion)
 
 - Beta reductions APP(ABS(...), ...):
   - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
@@ -216,6 +218,15 @@ def VAR(varname: int) -> Term:
 def _ABS(head: _Term) -> _Term:
     """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
     assert head.typ != TermType.TOP, "use ABS instead"
+    # Eagerly linearly reduce.
+    if head is _TOP:
+        return _TOP
+    if head.typ == TermType.APP:
+        # η-conversion: ABS(APP(lhs), VAR(0)) -> shift(lhs, delta=-1)
+        assert head.head is not None
+        assert head.body is not None
+        if head.body is VAR(0) and not head.head.free_vars.get(0):
+            return _shift(head.head, delta=-1)
     # Construct.
     free_vars = intern(Map({k - 1: v for k, v in head.free_vars.items() if k}))
     return _Term(TermType.ABS, head=head, free_vars=free_vars)
@@ -571,7 +582,69 @@ def is_normal(term: Term) -> bool:
 
 
 @weak_key_cache
-def _approximate(term: _Term) -> Term:
+def _leq(lhs: _Term, rhs: _Term) -> bool | None:
+    """Returns whether lhs <= rhs, or None if the relation is unknown."""
+    both_normal = _is_normal(lhs) and _is_normal(rhs)
+    if rhs.typ == TermType.TOP:
+        return True
+    if lhs.typ != rhs.typ:
+        if both_normal:
+            return False
+        return None
+    if lhs.typ == TermType.VAR:
+        return lhs.varname == rhs.varname
+    if lhs.typ == TermType.ABS:
+        assert lhs.head is not None
+        assert rhs.head is not None
+        return _leq(lhs.head, rhs.head)
+    if lhs.typ == TermType.APP:
+        assert lhs.head is not None
+        assert lhs.body is not None
+        assert rhs.head is not None
+        assert rhs.body is not None
+        leq_head = _leq(lhs.head, rhs.head)
+        leq_body = leq(lhs.body, rhs.body)
+        if leq_head and leq_body:
+            return True
+        if both_normal and leq_head is False or leq_body is False:
+            return False
+        return None
+    raise ValueError(f"unexpected term type: {lhs.typ}")
+
+
+@weak_key_cache
+def leq(lhs: Term, rhs: Term) -> bool | None:
+    """Returns whether lhs <= rhs, or None if the relation is unknown."""
+    if lhs is rhs:
+        return True
+    if lhs is BOT or rhs is TOP:
+        return True
+    if lhs.parts <= rhs.parts:
+        return True
+    # Compare element wise
+    result: bool | None = True
+    for l in lhs.parts:
+        result_l: bool | None = False
+        for r in rhs.parts:
+            result_lr = _leq(l, r)
+            if result_lr is True:
+                result_l = True
+                break
+            if result_lr is None:
+                result_l = None
+                break
+        if result_l is False:
+            # If l is normal, then it must be dominated by a single r.
+            if _is_normal(l) or len(rhs.parts) <= 1:
+                return False
+            result = None
+        if result_l is None:
+            result = None
+    return result
+
+
+@weak_key_cache
+def _approximate_lb(term: _Term) -> Term:
     """
     Approximates a term by replacing nonlinear beta redexes APP(ABS(-),-) with
     APP(ABS(-),BOT).
@@ -582,27 +655,70 @@ def _approximate(term: _Term) -> Term:
         return _JOIN(term)
     if term.typ == TermType.ABS:
         assert term.head is not None
-        return ABS(_approximate(term.head))
+        return ABS(_approximate_lb(term.head))
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
         # Approximate bottom-up
-        head = _approximate(term.head)
-        body = approximate(term.body)
+        head = _approximate_lb(term.head)
+        body = approximate_lb(term.body)
         if head is not _JOIN(term.head) or body is not term.body:
-            return approximate(APP(head, body))
+            return approximate_lb(APP(head, body))
         # Check for beta redex
-        _head = next(iter(head.parts))
+        _head = term.head
         if _head.typ == TermType.ABS:
             # Replace APP(ABS(-),-) with APP(ABS(-),BOT)
             assert _head.head is not None
             assert _head.head.free_vars.get(0, 0) > 1
-            return approximate(_APP(_head, BOT))
+            return approximate_lb(_APP(_head, BOT))
         return _JOIN(term)
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @weak_key_cache
-def approximate(term: Term) -> Term:
+def _approximate_ub(term: _Term) -> Term:
+    """
+    Approximates a term by replacing nonlinear beta redexes APP(ABS(-),-) with
+    APP(ABS(-),TOP).
+    """
+    if term.typ == TermType.TOP:
+        return TOP
+    if term.typ == TermType.VAR:
+        return _JOIN(term)
+    if term.typ == TermType.ABS:
+        assert term.head is not None
+        return ABS(_approximate_ub(term.head))
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+        # Approximate bottom-up
+        head = _approximate_ub(term.head)
+        body = approximate_ub(term.body)
+        if head is not _JOIN(term.head) or body is not term.body:
+            return approximate_lb(APP(head, body))
+        # Check for beta redex
+        _head = term.head
+        if _head.typ == TermType.ABS:
+            # Replace APP(ABS(-),-) with APP(ABS(-),TOP)
+            assert _head.head is not None
+            assert _head.head.free_vars.get(0, 0) > 1
+            return approximate_lb(_APP(_head, TOP))
+        return _JOIN(term)
+    raise ValueError(f"unexpected term type: {term.typ}")
+
+
+@weak_key_cache
+def approximate_lb(term: Term) -> Term:
     """Approximates a term by replacing APP(ABS(-),-) nodes with APP(ABS(-),BOT)."""
-    return JOIN(*(_approximate(part) for part in term.parts))
+    return JOIN(*(_approximate_lb(part) for part in term.parts))
+
+
+@weak_key_cache
+def approximate_ub(term: Term) -> Term:
+    """Approximates a term by replacing APP(ABS(-),-) nodes with APP(ABS(-),TOP)."""
+    return JOIN(*(_approximate_ub(part) for part in term.parts))
+
+
+def approximate(term: Term) -> tuple[Term, Term]:
+    """Produces a linear interval approximation of a term."""
+    return approximate_lb(term), approximate_ub(term)

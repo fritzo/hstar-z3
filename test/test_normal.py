@@ -18,6 +18,7 @@ from hstar.normal import (
     complexity,
     env_compose,
     is_normal,
+    leq,
     shift,
     subst,
 )
@@ -207,6 +208,9 @@ def test_eager_linear_reduction() -> None:
     assert APP(ABS(APP(VAR(1), VAR(0))), VAR(1)) is APP(VAR(0), VAR(1))
     assert APP(ABS(APP(VAR(1), VAR(0))), VAR(2)) is APP(VAR(0), VAR(2))
 
+    # Eta conversion
+    assert ABS(APP(VAR(1), VAR(0))) is VAR(0)
+
 
 def test_complexity() -> None:
     """Test that complexity calculation is correct for various terms."""
@@ -287,13 +291,18 @@ def test_env_compose() -> None:
 def test_approximate() -> None:
     quota = 20  # test at least a few non-normal terms
     for total, term in enumerate(enumerator):
-        actual = approximate(term)
+        lb, ub = approximate(term)
         if is_normal(term):
-            assert actual is term
-        else:
-            assert is_normal(actual)
-            logger.info(f"Approximated term {term} -> {actual}")
-            quota -= 1
+            assert lb is term
+            assert ub is term
+            continue
+        logger.info(f"Approximated term {lb} [= {term} [= {ub}")
+        assert is_normal(ub)
+        assert is_normal(lb)
+        assert leq(lb, ub)
+        assert leq(lb, term) is not False
+        assert leq(term, ub) is not False
+        quota -= 1
         if not quota:
             logger.info(f"Approximated {1 + total} terms")
             return

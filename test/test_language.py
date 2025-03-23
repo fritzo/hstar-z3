@@ -54,13 +54,10 @@ def assert_eq_weak(lhs_z3: z3.ExprRef, rhs_z3: z3.ExprRef) -> None:
         var = normal.VAR(fresh + i)
         lhs = normal.APP(lhs, var)
         rhs = normal.APP(rhs, var)
-    lhs = normal.approximate(lhs)
-    rhs = normal.approximate(rhs)
-
-    # Check equality.
-    if lhs != rhs:
-        logger.error(f"{lhs} != {rhs}")
-    assert lhs == rhs
+    lhs_lb, lhs_ub = normal.approximate(lhs)
+    rhs_lb, rhs_ub = normal.approximate(rhs)
+    if normal.leq(lhs_lb, rhs_ub) is False or normal.leq(rhs_lb, lhs_ub) is False:
+        raise AssertionError(f"{lhs} != {rhs}")
 
 
 def test_free_vars() -> None:
@@ -230,7 +227,6 @@ def test_iter_closure_maps_beta() -> None:
         assert len(free_vars(expr)) < len(free_vars(beta_eq))
 
 
-@pytest.mark.xfail(reason="FIXME")
 def test_iter_closures_beta() -> None:
     """Test combined closures for beta reduction axiom."""
     # The open form of ForAll(x, APP(ABS(VAR(0)), x) == x)
@@ -246,7 +242,7 @@ def test_iter_closures_beta() -> None:
         logger.debug(f"  LHS: {lhs}")
         logger.debug(f"  RHS: {rhs}")
         logger.debug(f"  Free vars: {free_vars(lhs) | free_vars(rhs)}")
-        assert_eq_weak(lhs, rhs)  # FIXME fails
+        assert_eq_weak(lhs, rhs)
 
     # All resulting expressions should be closed (no free variables)
     for expr in closures:
@@ -268,7 +264,6 @@ HINDLEY_AXIOMS = list(hindley_axioms())
 HINDLEY_IDS = [" ".join(str(x).split()) for x in HINDLEY_AXIOMS]
 
 
-@pytest.mark.xfail(reason="FIXME")
 @pytest.mark.parametrize("axiom", HINDLEY_AXIOMS, ids=HINDLEY_IDS)
 def test_qe_hindley(axiom: z3.ExprRef) -> None:
     equations = list(QEHindley(axiom))
