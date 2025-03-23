@@ -162,6 +162,10 @@ def lam(var: ExprRef, body: ExprRef) -> ExprRef:
             assert rhs_has
             return COMP(APP(J, lhs), rhs)  # (J lhs) o rhs x = J lhs (rhs x)
 
+        elif decl_name == "LEQ":
+            lhs, rhs = body.children()
+            return LEQ(lam(var, lhs), lam(var, rhs))
+
     if z3.is_eq(body):
         lhs, rhs = body.children()
         return lam(var, lhs) == lam(var, rhs)
@@ -253,6 +257,14 @@ def existential_closure(expr: ExprRef) -> ExprRef:
     return z3.Exists(holes, z3.substitute(expr, *subs))
 
 
+def is_eq_or_leq(expr: ExprRef) -> bool:
+    if z3.is_eq(expr):
+        return True
+    if z3.is_app(expr) and expr.decl() == LEQ:
+        return True
+    return False
+
+
 def iter_eta_substitutions(
     expr: ExprRef, *, compose: bool = False
 ) -> Iterator[ExprRef]:
@@ -299,14 +311,14 @@ def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
 
 
 def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
-    assert z3.is_eq(expr), expr
+    assert is_eq_or_leq(expr), expr
     if not free_vars(expr):
         yield expr
         return
     for expr2 in iter_eta_substitutions(expr):
-        assert z3.is_eq(expr2), expr2
+        assert is_eq_or_leq(expr2), expr2
         for expr3 in iter_closure_maps(expr2):
-            assert z3.is_eq(expr3), expr3
+            assert is_eq_or_leq(expr3), expr3
             yield expr3
 
 
@@ -315,29 +327,29 @@ def QEHindley(formula: ExprRef) -> set[ExprRef]:
     Converts a z3.ForAll formula into a set of closed formulas.
 
     This eliminates the quantifiers using Hindley's extensionality trick [1] and
-    a Curry-style combinatory abstraction algorithm.
+    a Curry-style combinatory abstraction algorithm. This works only for
+    positive relations: equality and LEQ.
 
     [1] Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
     """
     assert formula.sort() == z3.BoolSort()
 
     # Check whether the formula is a quantified equality.
-    equations: set[ExprRef] = set()
+    result: set[ExprRef] = set()
     if not z3.is_quantifier(formula) or not formula.is_forall():
-        return equations
+        return result
     body = formula.body()
-    if not z3.is_eq(body):
-        # TODO support LEQ(lhs, rhs)
-        return equations
+    if not is_eq_or_leq(body):
+        return result
     lhs, rhs = body.children()
     if not lhs.sort() == Term or not rhs.sort() == Term:
-        return equations
+        return result
 
     # Convert to a unique set of equations.
-    for equation in iter_closures(body):
-        assert z3.is_eq(equation)
-        lhs, rhs = equation.children()
+    for expr in iter_closures(body):
+        assert is_eq_or_leq(expr), expr
+        lhs, rhs = expr.children()
         if z3.eq(lhs, rhs):
             continue  # Skip trivial equalities.
-        equations.add(equation)
-    return equations
+        result.add(expr)
+    return result

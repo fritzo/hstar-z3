@@ -11,6 +11,7 @@ from hstar.language import (
     CB,
     COMP,
     JOIN,
+    LEQ,
     VAR,
     B,
     C,
@@ -23,6 +24,7 @@ from hstar.language import (
     W,
     app,
     free_vars,
+    is_eq_or_leq,
     iter_closure_maps,
     iter_closures,
     iter_eta_substitutions,
@@ -41,23 +43,32 @@ v1 = VAR(1)
 v2 = VAR(2)
 
 
-def assert_eq_weak(lhs_z3: z3.ExprRef, rhs_z3: z3.ExprRef) -> None:
+def assert_weak(expr: z3.ExprRef) -> None:
     """Weakly check equality of two z3 expressions using hstar.normal."""
-    lhs = z3_to_nf(lhs_z3)
-    rhs = z3_to_nf(rhs_z3)
+    assert is_eq_or_leq(expr)
+    lhs, rhs = map(z3_to_nf, expr.children())
     fresh = 1 + max(set(lhs.free_vars) | set(rhs.free_vars), default=-1)
 
     # Try to normalize by first applying fresh variables, then approximating.
     for i in range(4):
-        if normal.is_normal(lhs) and normal.is_normal(rhs):
+        if not any(part.typ == normal.TermType.ABS for part in (lhs.parts | rhs.parts)):
             break
         var = normal.VAR(fresh + i)
         lhs = normal.APP(lhs, var)
         rhs = normal.APP(rhs, var)
     lhs_lb, lhs_ub = normal.approximate(lhs)
     rhs_lb, rhs_ub = normal.approximate(rhs)
-    if normal.leq(lhs_lb, rhs_ub) is False or normal.leq(rhs_lb, lhs_ub) is False:
-        raise AssertionError(f"{lhs} != {rhs}")
+
+    if z3.is_eq(expr):
+        if normal.leq(lhs_lb, rhs_ub) is False:
+            raise AssertionError(f"failed {lhs} [= {rhs}")
+        if normal.leq(rhs_lb, lhs_ub) is False:
+            raise AssertionError(f"failed {rhs} [= {lhs}")
+    elif z3.is_app(expr) and str(expr.decl()) == "LEQ":
+        if normal.leq(lhs_lb, rhs_ub) is False:
+            raise AssertionError(f"failed {lhs} [= {rhs}")
+    else:
+        raise TypeError(f"unexpected expression: {expr}")
 
 
 def test_free_vars() -> None:
@@ -124,8 +135,9 @@ ABSTRACTION_EXAMPLES = [
     ("join-j-lhs", JOIN(v1, v0), app(J, v1)),
     # Case 8: lhs doesn't have v0, rhs has v0 but isn't v0 - COMP(APP(J, lhs), rhs)
     ("join-comp-lhs", JOIN(v1, app(v2, v0)), COMP(app(J, v1), v2)),
-    # Equality
+    # Relations
     ("eq", v0 == v1, I == app(K, v1)),
+    ("leq", LEQ(v0, v1), LEQ(I, app(K, v1))),
 ]
 ABSTRACTION_IDS = [str(x[0]) for x in ABSTRACTION_EXAMPLES]
 
@@ -133,13 +145,13 @@ ABSTRACTION_IDS = [str(x[0]) for x in ABSTRACTION_EXAMPLES]
 @pytest.mark.parametrize("_, expr, expected", ABSTRACTION_EXAMPLES, ids=ABSTRACTION_IDS)
 def test_lam(_: str, expr: z3.ExprRef, expected: z3.ExprRef) -> None:
     actual = lam(v0, expr)
-    if not z3.is_eq(expr):
+    if not is_eq_or_leq(expr):
         # Check free variables
         assert free_vars(actual) == free_vars(expr) - {v0}
 
         # Check back substitution
         back = APP(actual, v0)
-        assert_eq_weak(back, expr)
+        assert_weak(back == expr)
 
     # Check hand-coded expectation
     assert actual == expected
@@ -236,13 +248,13 @@ def test_iter_closures_beta() -> None:
     closures = list(iter_closures(beta_eq))
 
     # Print for debugging
-    for i, closure in enumerate(closures):
-        logger.debug(f"Complete closure {i}: {closure}")
-        lhs, rhs = closure.children()
+    for i, expr in enumerate(closures):
+        logger.debug(f"Complete closure {i}: {expr}")
+        lhs, rhs = expr.children()
         logger.debug(f"  LHS: {lhs}")
         logger.debug(f"  RHS: {rhs}")
         logger.debug(f"  Free vars: {free_vars(lhs) | free_vars(rhs)}")
-        assert_eq_weak(lhs, rhs)
+        assert_weak(expr)
 
     # All resulting expressions should be closed (no free variables)
     for expr in closures:
@@ -261,15 +273,18 @@ def test_qe_hindley_count() -> None:
 
 
 HINDLEY_AXIOMS = [
-    ax for _, ax in get_theory() if z3.is_quantifier(ax) if ax.is_forall()
+    ax
+    for _, ax in get_theory()
+    if z3.is_quantifier(ax)
+    if ax.is_forall()
+    if is_eq_or_leq(ax.body())
 ]
 HINDLEY_IDS = ["".join(str(x).split()) for x in HINDLEY_AXIOMS]
 
 
 @pytest.mark.parametrize("axiom", HINDLEY_AXIOMS, ids=HINDLEY_IDS)
 def test_qe_hindley(axiom: z3.ExprRef) -> None:
-    for e in QEHindley(axiom):
-        assert z3.is_eq(e)
-        assert not free_vars(e)
-        lhs, rhs = e.children()
-        assert_eq_weak(lhs, rhs)
+    for expr in QEHindley(axiom):
+        assert is_eq_or_leq(expr)
+        assert not free_vars(expr)
+        assert_weak(expr)
