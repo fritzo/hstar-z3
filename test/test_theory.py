@@ -10,6 +10,7 @@ from hstar.language import (
     APP,
     BOT,
     CI,
+    COMP,
     CONV,
     DIV,
     JOIN,
@@ -126,6 +127,7 @@ ORDER_EXAMPLES = {
     "y [= x | y": LEQ(y, JOIN(x, y)),
     "x | y [= y | x": LEQ(JOIN(x, y), JOIN(y, x)),
     "x | (y | z) [= (x | y) | z": LEQ(JOIN(x, JOIN(y, z)), JOIN(JOIN(x, y), z)),
+    "Y o J = I": COMP(Y, J) == I,
 }
 
 

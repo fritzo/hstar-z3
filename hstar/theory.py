@@ -195,6 +195,7 @@ def combinator_theory() -> Iterator[ExprRef]:
     yield Y == lam(x, app(lam_y_yy, lam_y_x_yy))
     yield Y == lam(x, app(lam_y_x_yy, lam_y_x_yy))
     yield Y == app(S, I, Y)
+    yield APP(Y, J) == TOP
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(x, y)))))
     yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
@@ -373,8 +374,9 @@ def lambda_theory() -> Iterator[ExprRef]:
         qid="beta_div",
     )
 
-    # Fixed point identification
+    # Fixed points
     yield ForAll([y], Implies(app(S, I, y) == y, y == Y), qid="siy")
+    yield ForAll([x], APP(Y, APP(J, x)) == x, qid="yj")
 
     # APP-JOIN distributivity (both directions)
     yield ForAll(
@@ -395,6 +397,17 @@ def lambda_theory() -> Iterator[ExprRef]:
         ],
         qid="app_join_mono",
     )
+    combinators = {"k": K, "ki": KI, "b": B, "c": C, "w": W, "s": S, "j": J}
+    for name, c in sorted(combinators.items()):
+        yield ForAll(
+            [x, y],
+            APP(c, JOIN(x, y)) == JOIN(APP(c, x), APP(c, y)),
+            patterns=[
+                MultiPattern(APP(c, JOIN(x, y)), APP(c, x), APP(c, y)),
+                MultiPattern(JOIN(x, y), JOIN(APP(c, x), APP(c, y))),
+            ],
+            qid=f"{name}_join",
+        )
 
     # APP monotonicity (in both arguments)
     yield ForAll(
