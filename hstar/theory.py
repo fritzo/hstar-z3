@@ -514,7 +514,6 @@ def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[Exp
     for x in inhabs:
         yield OFTYPE(x, t)
     # t contains only its inhabitants
-    # FIXME how does this interact with variables?
     yield ForAll([x], Or(*[APP(t, x) == i for i in inhabs]), qid=f"inhab_{qid}")
 
 

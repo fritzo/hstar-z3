@@ -87,7 +87,7 @@ def test_consistency(solver: z3.Solver) -> None:
     with solver, solver_timeout(solver, timeout_ms=1000):
         result = solver.check()
         if result == z3.unsat:
-            core = solver.unsat_core()  # FIXME sometimes core is empty
+            core = solver.unsat_core()
             logger.error(f"Unsat core:\n{core}")
         assert result != z3.unsat
 
