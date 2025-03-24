@@ -18,7 +18,7 @@ from hstar.normal import ABS, APP, VAR, Term, shift
 from hstar.synthesis import Synthesizer
 
 logger = logging.getLogger(__name__)
-setup_color_logging()
+setup_color_logging(level=logging.DEBUG)
 
 
 def main(args: argparse.Namespace) -> None:

@@ -189,7 +189,7 @@ def lam(var: ExprRef, body: ExprRef) -> ExprRef:
 
 def CONV(term: ExprRef) -> ExprRef:
     """Check whether a term converges (is not bottom)."""
-    return Not(LEQ(term, BOT))
+    return Not(term == BOT)
 
 
 def join(*args: ExprRef) -> ExprRef:

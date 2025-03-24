@@ -93,7 +93,7 @@ class Synthesizer:
             lemma = z3.ForAll(
                 holes,
                 lemma,
-                patterns=language.as_pattern(lemma),
+                patterns=[language.as_pattern(lemma)],
                 qid=name,
             )
         self.solver.assert_and_track(lemma, name)
