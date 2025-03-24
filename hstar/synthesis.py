@@ -14,7 +14,7 @@ from . import language
 from .enumeration import EnvRefiner, Refiner
 from .metrics import COUNTERS
 from .normal import Env, Term
-from .solvers import find_counterexample, try_prove
+from .solvers import find_counterexample, solver_timeout, try_prove
 from .theory import add_theory
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ class Synthesizer:
         self.constraint = constraint
         self.refiner = Refiner(sketch)
         self.solver = z3.Solver()
+        self.lemmas: list[z3.ExprRef] = []
         add_theory(self.solver)
 
     def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
@@ -43,25 +44,70 @@ class Synthesizer:
         Generate the next candidate and check it.
 
         Returns:
-            A tuple `(candidate,valid)` where `candidate` is the next candidate
+            A tuple `(candidate, valid)` where `candidate` is the next candidate
             sketch (possibly with holes) and `valid` is a boolean indicating
-            whether the candidate satisfies the constraint.
+            whether the candidate satisfies the constraint, or None if the
+            validity could not be determined.
         """
         counter["synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
-        constraint = language.existential_closure(constraint)
-        valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
-        if valid is True and not candidate.free_vars:
-            logger.info(f"Found solution: {candidate}")
-        if valid is False:
+        holes, constraint = language.hole_closure(constraint)
+
+        # Check if constraint is unsatisfiable (the more common case).
+        if self._is_unsat(constraint, timeout_ms):
             logger.debug(f"Rejected: {candidate}")
-        if valid is not None:
-            self.refiner.mark_valid(candidate, valid)
-            # TODO extract witness from existential constraints
-            self.solver.add(constraint if valid else z3.Not(constraint))
-        return candidate, valid
+            self.refiner.mark_valid(candidate, False)
+            # Add counterexample as a lemma.
+            counter["lemmas"] += 1
+            counter["lemmas.neg"] += 1
+            lemma = z3.Not(constraint)
+            name = f"lemma_{len(self.lemmas)}"
+            if holes:
+                counter["lemmas.forall"] += 1
+                lemma = z3.ForAll(
+                    holes,
+                    lemma,
+                    patterns=language.as_pattern(lemma),
+                    qid=name,
+                )
+            self.solver.assert_and_track(lemma, name)
+            self.lemmas.append(lemma)
+            return candidate, False
+
+        # Check if constraint is valid (the less common case).
+        not_constraint = z3.Not(constraint)
+        if holes:
+            not_constraint = z3.Exists(holes, not_constraint)
+        if self._is_unsat(not_constraint, timeout_ms):
+            logger.info(f"Found solution: {candidate}")
+            self.refiner.mark_valid(candidate, True)
+            # Add example as a lemma.
+            counter["lemmas"] += 1
+            counter["lemmas.pos"] += 1
+            lemma = constraint
+            name = f"lemma_{len(self.lemmas)}"
+            if holes:
+                counter["lemmas.forall"] += 1
+                lemma = z3.ForAll(
+                    holes,
+                    lemma,
+                    patterns=language.as_pattern(lemma),
+                    qid=name,
+                )
+            self.solver.assert_and_track(lemma, name)
+            self.lemmas.append(lemma)
+            return candidate, True
+
+        # The solver couldn't determine validity within the timeout.
+        return candidate, None
+
+    def _is_unsat(self, formula: z3.ExprRef, timeout_ms: int) -> bool:
+        # We expect sat to never occur, as our base theory is undecidable, hence
+        # we distinguish only unsat from sat/unknown.
+        with solver_timeout(self.solver, timeout_ms=timeout_ms):
+            return bool(self.solver.check(formula) == z3.unsat)
 
 
 class EnvSynthesizer:
@@ -90,6 +136,7 @@ class EnvSynthesizer:
             sketch (possibly with holes) and `valid` is a boolean indicating
             whether the candidate satisfies the constraint
         """
+        # TODO update to be closer to Synthesizer.step().
         counter["env_synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
@@ -141,14 +188,14 @@ class CEGISSynthesizer:
 
         # Check against counterexamples
         if self.counterexamples:
-            with self.solver:
+            with self.solver, solver_timeout(self.solver, timeout_ms=timeout_ms):
                 for counterexample in self.counterexamples:
                     # Create constraint for this counterexample
                     constraint_formula = self.constraint(candidate, counterexample)
                     self.solver.add(constraint_formula)
 
                 # Check whether candidate satisfies all counterexample constraints
-                result = self.solver.check(timeout=timeout_ms)
+                result = self.solver.check()
                 if result != z3.sat:
                     # This candidate doesn't work with our counterexamples
                     # Mark it as invalid and return

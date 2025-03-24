@@ -7,13 +7,18 @@ s o r [= I, until interrupted by the user.
 """
 
 import argparse
+import logging
 
 import z3
 
 from hstar.bridge import nf_to_z3
 from hstar.language import CONV, LEQ
+from hstar.logging import setup_color_logging
 from hstar.normal import ABS, APP, VAR, Term, shift
 from hstar.synthesis import Synthesizer
+
+logger = logging.getLogger(__name__)
+setup_color_logging()
 
 
 def main(args: argparse.Namespace) -> None:
@@ -50,14 +55,14 @@ def main(args: argparse.Namespace) -> None:
 
     synthesizer = Synthesizer(sketch, constraint)
 
-    print(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
+    logger.info(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
     while True:
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid or candidate.free_vars:
             continue
         r = fst(candidate)
         s = snd(candidate)
-        print(f"Found solution: <{r}, {s}>")
+        logger.info(f"Found solution: <{r}, {s}>")
 
 
 parser = argparse.ArgumentParser(

@@ -70,6 +70,17 @@ def get_fresh(*exprs: ExprRef) -> ExprRef:
             return var
 
 
+def occurs_in(sub: ExprRef, expr: ExprRef) -> bool:
+    """Return whether a subexpression occurs in an expression."""
+    if z3.eq(sub, expr):
+        return True
+    if z3.is_var(expr):
+        return False
+    if z3.is_app(expr):
+        return any(occurs_in(sub, arg) for arg in expr.children())
+    raise TypeError(f"Unknown term: {expr}")
+
+
 def _maybe_lam(var: ExprRef, body: ExprRef) -> tuple[bool, bool, ExprRef]:
     """
     Return a tuple of (has_var, is_var, lam_body).
@@ -244,17 +255,33 @@ def OFTYPE(x: ExprRef, t: ExprRef) -> ExprRef:
     return LEQ(APP(t, x), x)
 
 
-def existential_closure(expr: ExprRef) -> ExprRef:
-    """Existentially close a term over its free variables."""
+def hole_closure(expr: ExprRef) -> tuple[list[ExprRef], ExprRef]:
+    """Replace free variables of an expression with fresh holes."""
     if not free_vars(expr):
-        return expr
-    subs: list[tuple[ExprRef, ExprRef]] = []
+        return [], expr
     holes: list[ExprRef] = []
+    subs: list[tuple[ExprRef, ExprRef]] = []
     for var in free_vars(expr):
         hole = z3.FreshConst(Term, prefix="hole")
         holes.append(hole)
         subs.append((var, hole))
-    return z3.Exists(holes, z3.substitute(expr, *subs))
+    return holes, z3.substitute(expr, *subs)
+
+
+def _as_pattern(expr: ExprRef, parts: set[ExprRef]) -> None:
+    """Extract patterns from a term."""
+    if z3.is_not(expr) or z3.is_and(expr) or z3.is_or(expr) or z3.is_implies(expr):
+        for arg in expr.children():
+            _as_pattern(arg, parts)
+    else:
+        parts.add(expr)
+
+
+def as_pattern(expr: ExprRef) -> z3.MultiPattern:
+    """Extract maximal patterns from a term."""
+    result: set[ExprRef] = set()
+    _as_pattern(expr, result)
+    return z3.MultiPattern(*sorted(result, key=str))
 
 
 def is_eq_or_leq(expr: ExprRef) -> bool:

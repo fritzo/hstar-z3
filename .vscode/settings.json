@@ -12,6 +12,7 @@
     "redex",
     "redexes",
     "Satisfiability",
+    "subexpression",
     "unsat"
   ]
 }
