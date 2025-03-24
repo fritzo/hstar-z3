@@ -18,6 +18,7 @@ from hstar.language import SIMPLE
 from hstar.logging import setup_color_logging
 from hstar.synthesis import Synthesizer
 
+logger = logging.getLogger(__name__)
 setup_color_logging(level=logging.DEBUG)
 
 
@@ -47,12 +48,12 @@ def main(args: argparse.Namespace) -> None:
 
     synthesizer = Synthesizer(ast_to_nf(sketch), constraint)
 
-    print(f"Synthesizing SIMPLE type with timeout_ms={args.timeout_ms}")
-    while True:
+    logger.info(f"Synthesizing SIMPLE type with timeout_ms={args.timeout_ms}")
+    for _ in range(args.steps):
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid or candidate.free_vars:
             continue
-        print(f"Potential SIMPLE implementation: {candidate}")
+        logger.info(f"Potential SIMPLE implementation: {candidate}")
 
 
 parser = argparse.ArgumentParser(
@@ -63,6 +64,12 @@ parser.add_argument(
     type=int,
     default=500,
     help="Timeout for each Z3 invocation in milliseconds",
+)
+parser.add_argument(
+    "--steps",
+    type=int,
+    default=1_000_000_000,
+    help="Number of synthesis steps to run before stopping",
 )
 
 if __name__ == "__main__":

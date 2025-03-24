@@ -55,8 +55,8 @@ def main(args: argparse.Namespace) -> None:
 
     synthesizer = Synthesizer(sketch, constraint)
 
-    logger.info(f"Synthesizing with per-step timeout_ms={args.timeout_ms}")
-    while True:
+    logger.info(f"Synthesizing with timeout_ms={args.timeout_ms}")
+    for _ in range(args.steps):
         candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
         if not valid or candidate.free_vars:
             continue
@@ -78,6 +78,9 @@ parser.add_argument(
     "--nontrivial",
     action="store_true",
     help="Require both r and s to be convergent",
+)
+parser.add_argument(
+    "--steps", type=int, default=1_000_000_000, help="Maximum number of synthesis steps"
 )
 
 
