@@ -54,60 +54,50 @@ class Synthesizer:
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
+        not_constraint = z3.Not(constraint)
 
-        # Check if constraint is unsatisfiable (the more common case).
+        # Check if the constraint is unsatisfiable,
+        # which means the candidate is invalid.
         if self._is_unsat(constraint, timeout_ms):
+            counter["pos.unsat"] += 1
             logger.debug(f"Rejected: {candidate}")
             self.refiner.mark_valid(candidate, False)
-            # Add counterexample as a lemma.
-            counter["lemmas"] += 1
-            counter["lemmas.neg"] += 1
-            lemma = z3.Not(constraint)
-            name = f"lemma_{len(self.lemmas)}"
-            if holes:
-                counter["lemmas.forall"] += 1
-                lemma = z3.ForAll(
-                    holes,
-                    lemma,
-                    patterns=language.as_pattern(lemma),
-                    qid=name,
-                )
-            self.solver.assert_and_track(lemma, name)
-            self.lemmas.append(lemma)
+            # By DeMorgan's law: ¬∃x.φ(x) ≡ ∀x.¬φ(x)
+            self._lemma_forall(holes, not_constraint)
             return candidate, False
 
-        # Check if constraint is valid (the less common case).
-        not_constraint = z3.Not(constraint)
-        if holes:
-            not_constraint = z3.Exists(holes, not_constraint)
+        # Check if the negation of the constraint is unsatisfiable,
+        # which means the original constraint is valid.
         if self._is_unsat(not_constraint, timeout_ms):
-            logger.info(f"Found solution: {candidate}")
+            counter["neg.unsat"] += 1
+            logger.debug(f"Found solution: {candidate}")
             self.refiner.mark_valid(candidate, True)
-            # Add example as a lemma.
-            counter["lemmas"] += 1
-            counter["lemmas.pos"] += 1
-            lemma = constraint
-            name = f"lemma_{len(self.lemmas)}"
-            if holes:
-                counter["lemmas.forall"] += 1
-                lemma = z3.ForAll(
-                    holes,
-                    lemma,
-                    patterns=language.as_pattern(lemma),
-                    qid=name,
-                )
-            self.solver.assert_and_track(lemma, name)
-            self.lemmas.append(lemma)
+            # By DeMorgan's law: ¬∃x.¬φ(x) ≡ ∀x.φ(x)
+            self._lemma_forall(holes, constraint)
             return candidate, True
 
         # The solver couldn't determine validity within the timeout.
         return candidate, None
 
     def _is_unsat(self, formula: z3.ExprRef, timeout_ms: int) -> bool:
-        # We expect sat to never occur, as our base theory is undecidable, hence
-        # we distinguish only unsat from sat/unknown.
+        # We expect sat to never occur, as our base theory has no finite model,
+        # hence we distinguish only between unsat and unknown/sat.
         with solver_timeout(self.solver, timeout_ms=timeout_ms):
             return bool(self.solver.check(formula) == z3.unsat)
+
+    def _lemma_forall(self, holes: list[z3.ExprRef], lemma: z3.ExprRef) -> None:
+        counter["lemmas"] += 1
+        name = f"lemma_{len(self.lemmas)}"
+        if holes:
+            counter["lemmas.forall"] += 1
+            lemma = z3.ForAll(
+                holes,
+                lemma,
+                patterns=language.as_pattern(lemma),
+                qid=name,
+            )
+        self.solver.assert_and_track(lemma, name)
+        self.lemmas.append(lemma)
 
 
 class EnvSynthesizer:
@@ -215,6 +205,6 @@ class CEGISSynthesizer:
             logger.debug(f"Found counterexample: {counterexample}")
             self.counterexamples.append(counterexample)
         elif valid is True and not candidate.free_vars:
-            logger.info(f"Found solution: {candidate}")
+            logger.debug(f"Found solution: {candidate}")
 
         return candidate, valid
