@@ -16,7 +16,7 @@ lint: FORCE
 format: FORCE
 	black .
 	ruff check --fix .
-	nbstripout notebooks/*.ipynb
+	nbstripout examples/*.ipynb
 
 .PHONY: test
 test: lint FORCE
