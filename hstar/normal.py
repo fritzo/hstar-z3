@@ -24,8 +24,11 @@ The following eager linear reductions are applied during term construction:
 - Beta reductions APP(ABS(...), ...):
   - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
     - The bound variable occurs at most once in body, or
-    - arg is linear (TODO if this is too broad, narrow to BOT,TOP,VAR)
-
+    - arg is BOT, TOP, or VAR(...). Note it would be safe to widen this
+      condition from can_safely_copy(arg) to is_linear(arg), but that would push
+      many nonlinear terms to higher complexity, as can be measured by
+      examples/terms.ipynb.
+    
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.
 
@@ -242,6 +245,18 @@ def ABS(head: Term) -> Term:
     return _JOIN(*(_ABS(part) for part in head.parts))
 
 
+def can_safely_copy(body: Term) -> bool:
+    """Check whether a term can be safely copied."""
+    if body is TOP or body is BOT:
+        return True
+    if len(body.parts) > 1:
+        return False
+    if next(iter(body.parts)).typ == TermType.VAR:
+        # Note if varname > 0, complexity will increase.
+        return True
+    return False
+
+
 @weak_key_cache
 def _APP(head: _Term, body: Term) -> Term:
     """Application."""
@@ -250,7 +265,7 @@ def _APP(head: _Term, body: Term) -> Term:
         return TOP
     if head.typ == TermType.ABS:
         assert head.head is not None
-        if head.head.free_vars.get(0, 0) <= 1 or is_linear(body):
+        if head.head.free_vars.get(0, 0) <= 1 or can_safely_copy(body):
             body = shift(body, delta=1)
             result = _subst(head.head, env=Env({0: body}))
             return shift(result, delta=-1)
