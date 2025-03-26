@@ -1,5 +1,5 @@
 """
-# Language of λ-join-calculus in Z3.
+# Language of untyped λ-join-calculus in Z3.
 
 This uses combinatory algebra to represent closed λ-join-calculus terms, with a
 `LEQ` relation for the Scott ordering, and explicit `BOT` (bottom), `TOP` (top),

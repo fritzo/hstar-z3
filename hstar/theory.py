@@ -1,12 +1,22 @@
 """
-# Theory of λ-join-calculus expressions with Z3.
+# Theory of untyped λ-join-calculus modulo observable equality.
 
-This uses a de Bruijn indexed representation of λ-join-calculus terms, with a
-`LEQ` relation for the Scott ordering, and explicit `BOT` (bottom), `TOP` (top),
-and binary `JOIN` operation wrt the Scott ordering.
+This uses combinators to represent closed λ-join-calculus terms, with a `LEQ`
+relation for the Scott ordering, and explicit `BOT` (bottom), `TOP` (top), and
+binary `JOIN` operation wrt the Scott ordering. Equality in this partial order
+is observable equality, i.e. Hyland and Wadsworth's maximally coarse sensible
+equivalence relation H*. H* is pi^0_2-complete and hence undecidable, however we
+add Hindley's axioms for extensionality and several other axioms beyond mere
+beta-eta equivalence.
 
-The theory includes de Bruijn syntax, Scott ordering, λ-calculus, and
-types-as-closures.
+In addition to untyped λ-join-calculus, we adopt Scott's framework of
+types-as-closures, where a closure `a` is an idempotent increasing function
+`I [= a = a o a`. Closures afford a rich type system including a universal type
+`V` and a term `SIMPLE` that constructs simple types from codes.
+
+All terms in this theory are definable from the generators APP, S, K, J, and
+SIMPLE. Furthermore, it is conjectured that SIMPLE is definable from the
+generators APP, S, K, and J.
 """
 
 import functools
@@ -165,7 +175,11 @@ def order_theory() -> Iterator[ExprRef]:
 
 
 def combinator_theory() -> Iterator[ExprRef]:
-    """Definitions of basic combinators."""
+    """
+    Relations among of basic combinators.
+
+    Note `==` denotes observable equivalence, not syntactic equality.
+    """
     x = VAR(0)
     y = VAR(1)
     z = VAR(2)
@@ -204,7 +218,7 @@ def combinator_theory() -> Iterator[ExprRef]:
 
 
 def closure_theory() -> Iterator[ExprRef]:
-    """Theory of types and type membership."""
+    """Theory of closures."""
     # Types are closures.
     yield ForAll(
         [t],
@@ -474,7 +488,9 @@ def extensional_theory() -> Iterator[ExprRef]:
 
 
 def simple_theory(*, include_all: bool = False) -> Iterator[ExprRef]:
-    """Theory of SIMPLE type, defined as join of section-retract pairs."""
+    """
+    Theory of a SIMPLE type constructor, defined as join of section-retract pairs.
+    """
 
     def above_all_sr(candidate: ExprRef) -> ExprRef:
         s1, r1 = z3.Consts("s1 r1", Term)  # Different names for bound variables
@@ -518,7 +534,11 @@ def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[Exp
 
 
 def types_theory() -> Iterator[ExprRef]:
-    """Theory of concrete types."""
+    """
+    Theory of concrete types and their inhabitants.
+
+    Note these types are embedded in the untyped lambda calculus.
+    """
     axioms = [
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
