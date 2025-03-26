@@ -14,7 +14,7 @@ from . import language
 from .enumeration import EnvRefiner, Refiner
 from .metrics import COUNTERS
 from .normal import Env, Term
-from .solvers import find_counterexample, solver_timeout, try_prove
+from .solvers import solver_timeout, try_prove
 from .theory import add_theory
 
 logger = logging.getLogger(__name__)
@@ -135,76 +135,4 @@ class EnvSynthesizer:
         if valid is not None:
             self.refiner.mark_valid(candidate, valid)
             self.solver.add(constraint if valid else z3.Not(constraint))
-        return candidate, valid
-
-
-class CEGISSynthesizer:
-    """
-    A synthesis algorithm that uses Counterexample-Guided Inductive Synthesis
-    (CEGIS) to find a term that satisfies a universally quantified constraint.
-
-    Args:
-        sketch: The term sketch to refine.
-        constraint: A function that takes a candidate term and a symbolic input,
-            and returns a Z3 expression representing a constraint that should
-            hold for all possible values of the input.
-    """
-
-    def __init__(
-        self,
-        sketch: Term,
-        constraint: Callable[[Term, z3.ExprRef], z3.ExprRef],
-    ) -> None:
-        self.sketch = sketch
-        self.constraint = constraint
-        self.refiner = Refiner(sketch)
-        self.solver = z3.Solver()
-        add_theory(self.solver)
-        self.counterexamples: list[z3.ExprRef] = []
-
-    def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
-        """
-        Perform one step of the CEGIS algorithm.
-
-        Returns:
-            A tuple (candidate, valid) where candidate is the next candidate
-            term and valid indicates whether it satisfies the constraint.
-        """
-        counter["cegis.step"] += 1
-
-        # Generate next candidate
-        candidate = self.refiner.next_candidate()
-        logger.debug(f"Generated candidate: {candidate}")
-
-        # Check against counterexamples
-        if self.counterexamples:
-            with self.solver, solver_timeout(self.solver, timeout_ms=timeout_ms):
-                for counterexample in self.counterexamples:
-                    # Create constraint for this counterexample
-                    constraint_formula = self.constraint(candidate, counterexample)
-                    self.solver.add(constraint_formula)
-
-                # Check whether candidate satisfies all counterexample constraints
-                result = self.solver.check()
-                if result != z3.sat:
-                    # This candidate doesn't work with our counterexamples
-                    # Mark it as invalid and return
-                    self.refiner.mark_valid(candidate, False)
-                    return candidate, False
-
-        # Verify candidate against the full specification
-        example = z3.Const("example", language.Term)
-        formula = z3.ForAll([example], self.constraint(candidate, example))
-        valid, counterexample = find_counterexample(
-            self.solver, formula, example, timeout_ms=timeout_ms
-        )
-        if valid is not None:
-            self.refiner.mark_valid(candidate, valid)
-        if valid is False:
-            assert counterexample is not None
-            logger.debug(f"Found counterexample: {counterexample}")
-            self.counterexamples.append(counterexample)
-        elif valid is True and not candidate.free_vars:
-            logger.debug(f"Found solution: {candidate}")
-
         return candidate, valid
