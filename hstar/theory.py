@@ -211,8 +211,8 @@ def combinator_theory() -> Iterator[ExprRef]:
     yield Y == lam(x, app(lam_y_x_yy, lam_y_x_yy))
     yield Y == app(S, I, Y)
     yield APP(Y, J) == TOP
-    yield V == lam(x, app(Y, lam(y, JOIN(I, app(x, y)))))
-    yield V == lam(x, app(Y, lam(y, JOIN(I, app(y, x)))))
+    yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(x, y)))))
+    yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
     # TODO define SIMPLE
 
