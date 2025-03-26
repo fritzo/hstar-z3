@@ -304,7 +304,7 @@ def iter_eta_substitutions(
     actions = range(4 if compose else 3)
     for cases in itertools.product(actions, repeat=len(varlist)):
         result = expr
-        for var, case in zip(varlist, cases, strict=False):
+        for var, case in zip(varlist, cases, strict=True):
             if case == 0:
                 pass  # do nothing
             elif case == 1:
@@ -317,6 +317,18 @@ def iter_eta_substitutions(
             yield lam(fresh, result)
         else:
             yield result
+
+
+def iter_trivial_substitutions(expr: ExprRef) -> Iterator[ExprRef]:
+    """Iterate over substitutions of [x/TOP] and [x/BOT]."""
+    varlist = sorted(free_vars(expr), key=str)
+    actions = [None, TOP, BOT]
+    for cases in itertools.product(actions, repeat=len(varlist)):
+        result = expr
+        for var, case in zip(varlist, cases, strict=True):
+            if case is not None:
+                result = z3.substitute(result, (var, case))
+        yield result
 
 
 def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
@@ -337,19 +349,21 @@ def iter_closure_maps(expr: ExprRef) -> Iterator[ExprRef]:
         yield from iter_closure_maps(abstracted)
 
 
-def iter_closures(expr: ExprRef) -> Iterator[ExprRef]:
+def iter_closures(expr: ExprRef, *, trivial: bool = False) -> Iterator[ExprRef]:
     assert is_eq_or_leq(expr), expr
     if not free_vars(expr):
         yield expr
         return
     for expr2 in iter_eta_substitutions(expr):
-        assert is_eq_or_leq(expr2), expr2
-        for expr3 in iter_closure_maps(expr2):
-            assert is_eq_or_leq(expr3), expr3
-            yield expr3
+        if trivial:
+            for expr3 in iter_trivial_substitutions(expr2):
+                yield from iter_closure_maps(expr3)
+        else:
+            yield from iter_closure_maps(expr2)
 
 
-def QEHindley(formula: ExprRef) -> set[ExprRef]:
+# TODO consider defaulting to trivial=True.
+def QEHindley(formula: ExprRef, *, trivial: bool = False) -> set[ExprRef]:
     """
     Converts a z3.ForAll formula into a set of closed formulas.
 
@@ -358,6 +372,10 @@ def QEHindley(formula: ExprRef) -> set[ExprRef]:
     positive relations: equality and LEQ.
 
     [1] Roger Hindley (1967) "Axioms for strong reduction in combinatory logic"
+
+    Args:
+        formula: A z3 quantified formula.
+        trivial: Include trivial substitutions [x/TOP] and [x/BOT].
     """
     assert formula.sort() == z3.BoolSort()
 
@@ -372,8 +390,8 @@ def QEHindley(formula: ExprRef) -> set[ExprRef]:
     if not lhs.sort() == Term or not rhs.sort() == Term:
         return result
 
-    # Convert to a unique set of equations.
-    for expr in iter_closures(body):
+    # Convert to a unique set of formulas.
+    for expr in iter_closures(body, trivial=trivial):
         assert is_eq_or_leq(expr), expr
         lhs, rhs = expr.children()
         if z3.eq(lhs, rhs):

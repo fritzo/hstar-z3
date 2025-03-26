@@ -261,15 +261,16 @@ def test_iter_closures_beta() -> None:
         assert not free_vars(expr), f"Expression has free variables: {expr}"
 
 
-def test_qe_hindley_count() -> None:
-    actual = QEHindley(ForAll([x], app(I, x) == x))
-    assert len(actual) == 1
+@pytest.mark.parametrize("trivial", [False, True])
+def test_qe_hindley_count(trivial: bool) -> None:
+    actual = QEHindley(ForAll([x], app(I, x) == x), trivial=trivial)
+    assert len(actual) == [1, 5][trivial]
 
-    actual = QEHindley(ForAll([x, y], app(K, x, y) == x))
-    assert len(actual) == 13
+    actual = QEHindley(ForAll([x, y], app(K, x, y) == x), trivial=trivial)
+    assert len(actual) == [13, 47][trivial]
 
-    actual = QEHindley(ForAll([x, y, z], app(B, x, y, z) == x))
-    assert len(actual) == 134
+    actual = QEHindley(ForAll([x, y, z], app(B, x, y, z) == x), trivial=trivial)
+    assert len(actual) == [134, 516][trivial]
 
 
 HINDLEY_AXIOMS = [
