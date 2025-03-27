@@ -8,9 +8,12 @@
     "forall",
     "Hindley",
     "hstar",
+    "ipynb",
     "mbqi",
     "redex",
     "redexes",
+    "reduct",
+    "reducts",
     "Satisfiability",
     "subexpression",
     "unsat"

@@ -28,7 +28,7 @@ The following eager linear reductions are applied during term construction:
       condition from can_safely_copy(arg) to is_linear(arg), but that would push
       many nonlinear terms to higher complexity, as can be measured by
       examples/terms.ipynb.
-    
+
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.
 
@@ -37,6 +37,7 @@ take care when enumerating terms, allowing the complexity of a construction
 `JOIN(...)`, `ABS(...)`, or `APP(...)` to more than the sum of their parts + 1.
 """
 
+import itertools
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -44,6 +45,8 @@ from enum import Enum
 from functools import cache, lru_cache
 
 from immutables import Map
+
+from hstar.itertools import partitions
 
 from .functools import weak_key_cache
 from .hashcons import HashConsMeta, intern
@@ -737,3 +740,79 @@ def approximate_ub(term: Term) -> Term:
 def approximate(term: Term) -> tuple[Term, Term]:
     """Produces a linear interval approximation of a term."""
     return approximate_lb(term), approximate_ub(term)
+
+
+def _beta_shell(term: _Term, radius: int) -> set[Term]:
+    """
+    Collects a set of beta reducts of a term at a given radius.
+    """
+    if not radius:
+        return {_JOIN(term)}
+    if _is_normal(term):
+        return set()
+
+    # Process based on term type
+    result: set[Term] = set()
+    if term.typ == TermType.APP:
+        assert term.head is not None
+        assert term.body is not None
+
+        # Case 1: Beta reduce at this level
+        if term.head.typ == TermType.ABS:
+            assert term.head.head is not None
+            head_body = term.head.head
+            body_shifted = shift(term.body, delta=1)
+            reduced = _subst(head_body, env=Env({0: body_shifted}))
+            reduced = shift(reduced, delta=-1)
+            result.update(beta_shell(reduced, radius - 1))
+
+        # Case 2: Independently reduce the head and body
+        for head_radius, body_radius in partitions(radius, 2):
+            head_shell = _beta_shell(term.head, head_radius)
+            body_shell = beta_shell(term.body, body_radius)
+            for head, body in itertools.product(head_shell, body_shell):
+                result.add(APP(head, body))
+
+    elif term.typ == TermType.ABS:
+        assert term.head is not None
+        # Reduce inside the abstraction
+        for head_reduct in _beta_shell(term.head, radius):
+            result.add(ABS(head_reduct))
+
+    return result
+
+
+def beta_shell(term: Term, radius: int) -> set[Term]:
+    """
+    Collects a set of beta reducts of a term at a given radius.
+    """
+    if not radius:
+        return {term}
+    if is_normal(term):
+        return set()
+
+    # Compute nested shells (onions) for each part
+    parts = list(term.parts)
+    onions: list[list[set[Term]]] = [[] for _ in parts]
+    for part, onion in zip(parts, onions, strict=True):
+        for r in range(radius + 1):
+            onion.append(_beta_shell(part, r))
+
+    # Combine nested shells (onions) at given total radius
+    result: set[Term] = set()
+    for radii in partitions(radius, len(parts)):
+        strata = [onion[r] for r, onion in zip(radii, onions, strict=True)]
+        for reduced_parts in itertools.product(*strata):
+            result.add(JOIN(*reduced_parts))
+
+    return result
+
+
+def beta_ball(term: Term, radius: int) -> set[Term]:
+    """
+    Collects a set of beta reducts of a term, up to a given radius.
+    """
+    result: set[Term] = {term}
+    for r in range(1, radius + 1):
+        result.update(beta_shell(term, r))
+    return result

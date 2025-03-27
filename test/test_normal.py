@@ -15,6 +15,7 @@ from hstar.normal import (
     TermType,
     _Term,
     approximate,
+    beta_ball,
     complexity,
     env_compose,
     is_normal,
@@ -307,3 +308,52 @@ def test_approximate() -> None:
             logger.info(f"Approximated {1 + total} terms")
             return
     pytest.fail("Ran out of terms to approximate")
+
+
+def test_beta_ball() -> None:
+    # Case 1: Already normal forms (should return just the term itself for radius 0)
+    assert beta_ball(VAR(0), 0) == {VAR(0)}
+    assert beta_ball(TOP, 0) == {TOP}
+    assert beta_ball(BOT, 0) == {BOT}
+    assert beta_ball(ABS(VAR(0)), 0) == {ABS(VAR(0))}
+
+    # Case 2: single beta redex
+    x = APP(ABS(APP(VAR(0), VAR(0))), ABS(VAR(0)))
+    x_0 = ABS(VAR(0))
+    assert beta_ball(x, 0) == {x}
+    assert beta_ball(x, 1) == {x, x_0}
+    assert beta_ball(x, 2) == {x, x_0}
+
+    # Case 2: single beta redex
+    y = APP(ABS(APP(VAR(0), VAR(0))), ABS(VAR(1)))
+    y_0 = VAR(0)
+    assert beta_ball(y, 0) == {y}
+    assert beta_ball(y, 1) == {y, y_0}
+    assert beta_ball(y, 2) == {y, y_0}
+
+    # Case 3: two beta redexes
+    z = JOIN(x, y)
+    z_0 = JOIN(x, y_0)
+    z_1 = JOIN(x_0, y)
+    z_0_0 = JOIN(x_0, y_0)
+    assert beta_ball(z, 0) == {z}
+    assert beta_ball(z, 1) == {z, z_0, z_1}
+    assert beta_ball(z, 2) == {z, z_0, z_1, z_0_0}
+    assert beta_ball(z, 3) == {z, z_0, z_1, z_0_0}
+
+    # Case 4: omega, the self-reducing term
+    w = APP(ABS(APP(VAR(0), VAR(0))), ABS(APP(VAR(0), VAR(0))))
+    assert beta_ball(w, 0) == {w}
+    assert beta_ball(w, 1) == {w}
+
+    # Case 5: an infinite reduction chain
+    lam_y_yxx = ABS(APP(VAR(1), APP(VAR(0), VAR(0))))
+    v = VAR(0)
+    Yv = APP(lam_y_yxx, lam_y_yxx)
+    v_Yv = APP(v, Yv)
+    vv_Yv = APP(v, v_Yv)
+    vvv_Yv = APP(v, vv_Yv)
+    assert beta_ball(Yv, 0) == {Yv}
+    assert beta_ball(Yv, 1) == {Yv, v_Yv}
+    assert beta_ball(Yv, 2) == {Yv, v_Yv, vv_Yv}
+    assert beta_ball(Yv, 3) == {Yv, v_Yv, vv_Yv, vvv_Yv}
