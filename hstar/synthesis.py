@@ -200,13 +200,10 @@ class BatchingSynthesizer(SynthesizerBase):
 
         # Check invalid candidates.
         logger.debug("Checking for invalid candidates")
-        try:
-            rejected = self._unsat_subset(constraints)
-        except TimeoutError:
-            counter["batch_synthesizer.invalid.timeout"] += 1
-            logger.debug(f"Failed to show {len(pending)} candidates are invalid")
-            self._pending_invalid.clear()
-            return
+        rejected, discard = self._check(constraints)
+        for key in discard:
+            counter["pos.unknown"] += 1
+            pending.pop(key)
         for key in rejected:
             counter["pos.unsat"] += 1
             c = pending.pop(key)
@@ -225,13 +222,10 @@ class BatchingSynthesizer(SynthesizerBase):
 
         # Check valid candidates.
         logger.debug("Checking for valid candidates")
-        try:
-            accepted = self._unsat_subset(not_constraints)
-        except TimeoutError:
-            counter["batch_synthesizer.valid.timeout"] += 1
-            logger.debug(f"Failed to show {len(pending)} candidates are valid")
-            self._pending_valid.clear()
-            return
+        accepted, discard = self._check(not_constraints)
+        for key in discard:
+            counter["neg.unknown"] += 1
+            pending.pop(key)
         for key in accepted:
             counter["neg.unsat"] += 1
             c = pending.pop(key)
@@ -242,24 +236,50 @@ class BatchingSynthesizer(SynthesizerBase):
             lemma_forall(self.solver, c.holes, c.constraint)
             self._new_solutions.append(c)
 
-    def _unsat_subset(self, formulas: dict[str, z3.ExprRef]) -> set[str]:
-        """Returns a subset of the formulas that are unsatisfiable."""
+    def _check(self, formulas: dict[str, z3.ExprRef]) -> tuple[set[str], set[str]]:
+        """
+        Returns (unsat,discard) formulas. Remaining formulas should be retried.
+        """
         # Assume the query is convex, i.e. if any subset of the formulas is
         # unsatisfiable, then at least one of the formulas is unsatisfiable.
+        unsat: set[str] = set()
+        discard: set[str] = set()
+
+        # Base case is a single formula.
+        if len(formulas) == 1:
+            # Check whether the single formula is unsatisfiable.
+            if self.solver.check(*formulas.values()) != z3.unsat:
+                discard.update(formulas)
+                return unsat, discard
+            unsat.update(formulas)
+            return unsat, discard
+
+        # Check whether any formula is unsatisfiable, and examine the unsat core.
         with self.solver:
             for name, formula in formulas.items():
                 self.solver.assert_and_track(formula, name)
-            result = self.solver.check()
-            if result != z3.unsat:
-                raise TimeoutError
+            if self.solver.check() != z3.unsat:
+                discard.update(formulas)
+                return unsat, discard
             unsat_core = self.solver.unsat_core()
-        # Individually check each formula in the unsat core.
         maybe_unsat = set(map(str, unsat_core)) & set(formulas)
-        unsat: set[str] = set()
-        for key in maybe_unsat:
-            if self.solver.check(formulas[key]) == z3.unsat:
-                unsat.add(key)
-        return unsat
+        assert maybe_unsat
+
+        # If a single formula is unsatisfiable, then it is to blame.
+        if len(maybe_unsat) == 1:
+            unsat.update(maybe_unsat)
+            return unsat, discard
+
+        # Recurse.
+        keys = sorted(maybe_unsat)
+        x = {k: formulas[k] for k in keys[: len(keys) // 2]}
+        y = {k: formulas[k] for k in keys[len(keys) // 2 :]}
+        unsat_x, discard_x = self._check(x)
+        # TODO move lemma_forall here, rather than later
+        unsat_y, discard_y = self._check(y)
+        unsat.update(unsat_x, unsat_y)
+        discard.update(discard_x, discard_y)
+        return unsat, discard
 
 
 class EnvSynthesizer:
