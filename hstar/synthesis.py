@@ -16,7 +16,7 @@ from .enumeration import EnvRefiner, Refiner
 from .grammars import Grammar
 from .metrics import COUNTERS
 from .normal import Env, Term
-from .solvers import solver_timeout, try_prove
+from .solvers import try_prove
 from .theory import add_theory
 
 logger = logging.getLogger(__name__)
@@ -33,15 +33,23 @@ class Synthesizer:
             expression representing a constraint on the candidate.
     """
 
-    def __init__(self, sketch: Term, constraint: Callable[[Term], z3.ExprRef]) -> None:
+    def __init__(
+        self,
+        sketch: Term,
+        constraint: Callable[[Term], z3.ExprRef],
+        *,
+        timeout_ms: int = 1000,
+    ) -> None:
         self.sketch = sketch
         self.constraint = constraint
         self.refiner = Refiner(sketch)
         self.solver = z3.Solver()
+        self.solver.set(timeout=timeout_ms)
+        self.solver.timeout_ms = timeout_ms  # for hstar use only
         self.lemmas: list[z3.ExprRef] = []
         add_theory(self.solver)
 
-    def step(self, *, timeout_ms: int = 1000) -> tuple[Term, bool | None]:
+    def step(self) -> tuple[Term, bool | None]:
         """
         Generate the next candidate and check it.
 
@@ -60,7 +68,7 @@ class Synthesizer:
 
         # Check if the constraint is unsatisfiable,
         # which means the candidate is invalid.
-        if self._is_unsat(constraint, timeout_ms):
+        if self._is_unsat(constraint):
             counter["pos.unsat"] += 1
             logger.debug(f"Rejected: {candidate}")
             self.refiner.mark_valid(candidate, False)
@@ -70,7 +78,7 @@ class Synthesizer:
 
         # Check if the negation of the constraint is unsatisfiable,
         # which means the original constraint is valid.
-        if self._is_unsat(not_constraint, timeout_ms):
+        if self._is_unsat(not_constraint):
             counter["neg.unsat"] += 1
             logger.debug(f"Found solution: {candidate}")
             self.refiner.mark_valid(candidate, True)
@@ -81,11 +89,10 @@ class Synthesizer:
         # The solver couldn't determine validity within the timeout.
         return candidate, None
 
-    def _is_unsat(self, formula: z3.ExprRef, timeout_ms: int) -> bool:
+    def _is_unsat(self, formula: z3.ExprRef) -> bool:
         # We expect sat to never occur, as our base theory has no finite model,
         # hence we distinguish only between unsat and unknown/sat.
-        with solver_timeout(self.solver, timeout_ms=timeout_ms):
-            return bool(self.solver.check(formula) == z3.unsat)
+        return bool(self.solver.check(formula) == z3.unsat)
 
     def _lemma_forall(self, holes: list[z3.ExprRef], lemma: z3.ExprRef) -> None:
         counter["lemmas"] += 1
@@ -186,14 +193,14 @@ def sygus(
     #    implementing a custom tactic to instantiate the quantifier.
     global _INSTANCE
     hole = z3.FreshConst(grammar.sort, "hole")
+    formula = ForAll([hole], Not(constraint(grammar.eval(hole))), qid="sygus")
     solver = z3.Solver()
     add_theory(solver)
     logger.info("Synthesizing")
     solver.add(*grammar.eval_theory)
-    solver.add(ForAll([hole], Not(constraint(grammar.eval(hole))), qid="sygus"))
     z3.OnClause(solver, _on_clause)
     _INSTANCE = []
-    result = solver.check()
+    result = solver.check(formula)
     if result != z3.unsat:
         return None
     if not _INSTANCE:

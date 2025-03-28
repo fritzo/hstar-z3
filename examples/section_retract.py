@@ -53,11 +53,11 @@ def main(args: argparse.Namespace) -> None:
             result = z3.And(result, CONV(nf_to_z3(r)), CONV(nf_to_z3(s)))
         return result
 
-    synthesizer = Synthesizer(sketch, constraint)
+    synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
 
     logger.info(f"Synthesizing with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
-        candidate, valid = synthesizer.step(timeout_ms=args.timeout_ms)
+        candidate, valid = synthesizer.step()
         if not valid or candidate.free_vars:
             continue
         r = fst(candidate)
