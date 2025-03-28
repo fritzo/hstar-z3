@@ -15,7 +15,7 @@ from hstar.bridge import nf_to_z3
 from hstar.language import CONV, LEQ
 from hstar.logging import setup_color_logging
 from hstar.normal import ABS, APP, VAR, Term, shift
-from hstar.synthesis import Synthesizer
+from hstar.synthesis import BatchingSynthesizer, Synthesizer, SynthesizerBase
 
 logger = logging.getLogger(__name__)
 setup_color_logging(level=logging.DEBUG)
@@ -53,7 +53,13 @@ def main(args: argparse.Namespace) -> None:
             result = z3.And(result, CONV(nf_to_z3(r)), CONV(nf_to_z3(s)))
         return result
 
-    synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
+    synthesizer: SynthesizerBase
+    if args.batch_size == 1:
+        synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
+    else:
+        synthesizer = BatchingSynthesizer(
+            sketch, constraint, timeout_ms=args.timeout_ms, batch_size=args.batch_size
+        )
 
     logger.info(f"Synthesizing with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
@@ -81,6 +87,12 @@ parser.add_argument(
 )
 parser.add_argument(
     "--steps", type=int, default=1_000_000_000, help="Maximum number of synthesis steps"
+)
+parser.add_argument(
+    "--batch-size",
+    type=int,
+    default=1,
+    help="Synthesizer batch size",
 )
 
 

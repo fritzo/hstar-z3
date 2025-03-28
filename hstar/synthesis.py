@@ -5,8 +5,11 @@ This module provides algorithms for synthesizing λ-join-calculus terms
 that satisfy given constraints.
 """
 
+import abc
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
+from weakref import WeakKeyDictionary
 
 import z3
 from z3 import ForAll, Not
@@ -22,8 +25,32 @@ from .theory import add_theory
 logger = logging.getLogger(__name__)
 counter = COUNTERS[__name__]
 
+LEMMAS: WeakKeyDictionary[z3.Solver, list[z3.ExprRef]] = WeakKeyDictionary()
 
-class Synthesizer:
+
+def lemma_forall(solver: z3.Solver, holes: list[z3.ExprRef], lemma: z3.ExprRef) -> None:
+    lemmas = LEMMAS.setdefault(solver, [])
+    counter["lemmas"] += 1
+    name = f"lemma_{len(lemmas)}"
+    if holes:
+        counter["lemmas.forall"] += 1
+        lemma = z3.ForAll(
+            holes,
+            lemma,
+            patterns=[language.as_pattern(lemma)],
+            qid=name,
+        )
+    solver.assert_and_track(lemma, name)
+    lemmas.append(lemma)
+
+
+class SynthesizerBase(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def step(self) -> tuple[Term, bool | None]:
+        """Generate the next candidate and check it."""
+
+
+class Synthesizer(SynthesizerBase):
     """
     A synthesis algorithm that searches through refinements of a sketch.
 
@@ -73,7 +100,7 @@ class Synthesizer:
             logger.debug(f"Rejected: {candidate}")
             self.refiner.mark_valid(candidate, False)
             # By DeMorgan's law: ¬∃x.φ(x) ≡ ∀x.¬φ(x)
-            self._lemma_forall(holes, not_constraint)
+            lemma_forall(self.solver, holes, not_constraint)
             return candidate, False
 
         # Check if the negation of the constraint is unsatisfiable,
@@ -83,7 +110,7 @@ class Synthesizer:
             logger.debug(f"Found solution: {candidate}")
             self.refiner.mark_valid(candidate, True)
             # By DeMorgan's law: ¬∃x.¬φ(x) ≡ ∀x.φ(x)
-            self._lemma_forall(holes, constraint)
+            lemma_forall(self.solver, holes, constraint)
             return candidate, True
 
         # The solver couldn't determine validity within the timeout.
@@ -94,19 +121,145 @@ class Synthesizer:
         # hence we distinguish only between unsat and unknown/sat.
         return bool(self.solver.check(formula) == z3.unsat)
 
-    def _lemma_forall(self, holes: list[z3.ExprRef], lemma: z3.ExprRef) -> None:
-        counter["lemmas"] += 1
-        name = f"lemma_{len(self.lemmas)}"
-        if holes:
-            counter["lemmas.forall"] += 1
-            lemma = ForAll(
-                holes,
-                lemma,
-                patterns=[language.as_pattern(lemma)],
-                qid=name,
+
+@dataclass(slots=True)
+class Candidate:
+    term: Term
+    holes: list[z3.ExprRef]
+    constraint: z3.ExprRef
+    not_constraint: z3.ExprRef
+    valid: bool | None = None
+
+
+class BatchingSynthesizer(SynthesizerBase):
+    def __init__(
+        self,
+        sketch: Term,
+        constraint: Callable[[Term], z3.ExprRef],
+        *,
+        batch_size: int = 1,
+        timeout_ms: int = 1000,
+    ) -> None:
+        self.sketch = sketch
+        self.constraint = constraint
+        self.refiner = Refiner(sketch)
+        self.solver = z3.Solver()
+        self.solver.set(timeout=timeout_ms)
+        self.solver.set("unsat_core", True)
+        self.solver.timeout_ms = timeout_ms
+        self.batch_size = batch_size
+        self.lemmas: list[z3.ExprRef] = []
+        add_theory(self.solver)
+
+        # Candidates remain pending until either they are decided or hit a timeout.
+        self._next_id = 0
+        self._pending_valid: dict[str, Candidate] = {}
+        self._pending_invalid: dict[str, Candidate] = {}
+        self._new_solutions: list[Candidate] = []
+
+    def step(self) -> tuple[Term, bool]:
+        """Performs work to evaluate a single candidate."""
+        while not self._new_solutions:
+            self._fill()
+            if self._pending_invalid:
+                self._step_invalid()
+            self._fill()
+            if self._pending_valid:
+                self._step_valid()
+        c = self._new_solutions.pop()
+        assert c.valid is not None
+        return c.term, c.valid
+
+    @property
+    def _pending_size(self) -> int:
+        return max(len(self._pending_valid), len(self._pending_invalid))
+
+    def _fill(self) -> None:
+        while self._pending_size < self.batch_size:
+            candidate = self.refiner.next_candidate()
+            logger.debug(f"Proposing candidate: {candidate}")
+            constraint = self.constraint(candidate)
+            holes, constraint = language.hole_closure(constraint)
+            not_constraint = Not(constraint)
+            key = f"candidate_{self._next_id}"
+            self._next_id += 1
+            c = Candidate(
+                term=candidate,
+                holes=holes,
+                constraint=constraint,
+                not_constraint=not_constraint,
             )
-        self.solver.assert_and_track(lemma, name)
-        self.lemmas.append(lemma)
+            self._pending_invalid[key] = c
+            self._pending_valid[key] = c
+
+    def _step_invalid(self) -> None:
+        counter["batch_synthesizer.invalid"] += 1
+        pending = self._pending_invalid
+        keys = sorted(pending.keys())
+        constraints = {key: pending[key].constraint for key in keys}
+
+        # Check invalid candidates.
+        logger.debug("Checking for invalid candidates")
+        try:
+            rejected = self._unsat_subset(constraints)
+        except TimeoutError:
+            counter["batch_synthesizer.invalid.timeout"] += 1
+            logger.debug(f"Failed to show {len(pending)} candidates are invalid")
+            self._pending_invalid.clear()
+            return
+        for key in rejected:
+            counter["pos.unsat"] += 1
+            c = pending.pop(key)
+            self._pending_valid.pop(key, None)
+            c.valid = False
+            logger.debug(f"Rejected: {c.term}")
+            self.refiner.mark_valid(c.term, False)
+            lemma_forall(self.solver, c.holes, c.not_constraint)
+            self._new_solutions.append(c)
+
+    def _step_valid(self) -> None:
+        counter["batch_synthesizer.step_valid"] += 1
+        pending = self._pending_valid
+        keys = sorted(pending.keys())
+        not_constraints = {key: pending[key].not_constraint for key in keys}
+
+        # Check valid candidates.
+        logger.debug("Checking for valid candidates")
+        try:
+            accepted = self._unsat_subset(not_constraints)
+        except TimeoutError:
+            counter["batch_synthesizer.valid.timeout"] += 1
+            logger.debug(f"Failed to show {len(pending)} candidates are valid")
+            self._pending_valid.clear()
+            return
+        for key in accepted:
+            counter["neg.unsat"] += 1
+            c = pending.pop(key)
+            self._pending_invalid.pop(key, None)
+            c.valid = True
+            logger.debug(f"Accepted: {c.term}")
+            self.refiner.mark_valid(c.term, True)
+            lemma_forall(self.solver, c.holes, c.constraint)
+            self._new_solutions.append(c)
+
+    def _unsat_subset(self, formulas: dict[str, z3.ExprRef]) -> set[str]:
+        """Returns a subset of the formulas that are unsatisfiable."""
+        # Assume the query is convex, i.e. if any subset of the formulas is
+        # unsatisfiable, then at least one of the formulas is unsatisfiable.
+        with self.solver:
+            for name, formula in formulas.items():
+                self.solver.assert_and_track(formula, name)
+            result = self.solver.check()
+            if result != z3.unsat:
+                raise TimeoutError
+            unsat_core = self.solver.unsat_core()
+        # Individually check each formula in the unsat core.
+        maybe_unsat = set(map(str, unsat_core)) & set(formulas)
+        unsat: set[str] = set()
+        for key in maybe_unsat:
+            if self.solver.check(formulas[key]) == z3.unsat:
+                unsat.add(key)
+        return unsat
 
 
 class EnvSynthesizer:
