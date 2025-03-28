@@ -16,6 +16,8 @@
     "reducts",
     "Satisfiability",
     "subexpression",
-    "unsat"
+    "sygus",
+    "unsat",
+    "unsatisfiability"
   ]
 }
