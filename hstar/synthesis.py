@@ -122,12 +122,21 @@ class Synthesizer(SynthesizerBase):
 
 
 @dataclass(slots=True)
-class Candidate:
+class Claim:
     term: Term
     holes: list[z3.ExprRef]
     constraint: z3.ExprRef
     not_constraint: z3.ExprRef
     valid: bool | None = None
+
+    def negate(self) -> "Claim":
+        return Claim(
+            term=self.term,
+            holes=self.holes,
+            constraint=self.not_constraint,
+            not_constraint=self.constraint,
+            valid=None,
+        )
 
 
 class BatchingSynthesizer(SynthesizerBase):
@@ -151,88 +160,56 @@ class BatchingSynthesizer(SynthesizerBase):
 
         # Candidates remain pending until either they are decided or hit a timeout.
         self._next_id = 0
-        self._pending_valid: dict[str, Candidate] = {}
-        self._pending_invalid: dict[str, Candidate] = {}
-        self._new_solutions: list[Candidate] = []
+        self._pending: tuple[dict[str, Claim], dict[str, Claim]] = {}, {}
+        self._new_facts: dict[Term, bool] = {}
 
     def step(self) -> tuple[Term, bool]:
-        """Performs work to evaluate a single candidate."""
-        while not self._new_solutions:
-            self._fill()
-            if self._pending_invalid:
-                self._step_invalid()
-            self._fill()
-            if self._pending_valid:
-                self._step_valid()
-        c = self._new_solutions.pop()
-        assert c.valid is not None
-        return c.term, c.valid
+        """Performs inference until a new fact is learned."""
+        while not self._new_facts:
+            for valid in (False, True):
+                while max(map(len, self._pending)) < self.batch_size:
+                    self._add_candidate()
+                if self._pending[valid]:
+                    self._step(valid)
+        term, valid = self._new_facts.popitem()
+        assert valid is not None
+        return term, valid
 
-    @property
-    def _pending_size(self) -> int:
-        return max(len(self._pending_valid), len(self._pending_invalid))
+    def _add_candidate(self) -> None:
+        candidate = self.refiner.next_candidate()
+        logger.debug(f"Proposing candidate: {candidate}")
+        constraint = self.constraint(candidate)
+        holes, constraint = language.hole_closure(constraint)
+        key = f"candidate_{self._next_id}"
+        self._next_id += 1
+        c = Claim(
+            term=candidate,
+            holes=holes,
+            constraint=constraint,
+            not_constraint=Not(constraint),
+        )
+        self._pending[True][key] = c
+        self._pending[False][key] = c.negate()
 
-    def _fill(self) -> None:
-        while self._pending_size < self.batch_size:
-            candidate = self.refiner.next_candidate()
-            logger.debug(f"Proposing candidate: {candidate}")
-            constraint = self.constraint(candidate)
-            holes, constraint = language.hole_closure(constraint)
-            not_constraint = Not(constraint)
-            key = f"candidate_{self._next_id}"
-            self._next_id += 1
-            c = Candidate(
-                term=candidate,
-                holes=holes,
-                constraint=constraint,
-                not_constraint=not_constraint,
-            )
-            self._pending_invalid[key] = c
-            self._pending_valid[key] = c
-
-    def _step_invalid(self) -> None:
+    def _step(self, valid: bool) -> None:
         counter["batch_synthesizer.invalid"] += 1
-        pending = self._pending_invalid
+        logger.debug("Checking claims")
+        pending = self._pending[valid]
         keys = sorted(pending.keys())
-        constraints = {key: pending[key].constraint for key in keys}
-
-        # Check invalid candidates.
-        logger.debug("Checking for invalid candidates")
-        rejected, discard = self._check(constraints)
-        for key in discard:
-            counter["pos.unknown"] += 1
-            pending.pop(key)
-        for key in rejected:
-            counter["pos.unsat"] += 1
-            c = pending.pop(key)
-            self._pending_valid.pop(key, None)
-            c.valid = False
-            logger.debug(f"Rejected: {c.term}")
-            self.refiner.mark_valid(c.term, False)
-            lemma_forall(self.solver, c.holes, c.not_constraint)
-            self._new_solutions.append(c)
-
-    def _step_valid(self) -> None:
-        counter["batch_synthesizer.step_valid"] += 1
-        pending = self._pending_valid
-        keys = sorted(pending.keys())
+        # A claim is true if its negation is unsatisfiable.
         not_constraints = {key: pending[key].not_constraint for key in keys}
-
-        # Check valid candidates.
-        logger.debug("Checking for valid candidates")
-        accepted, discard = self._check(not_constraints)
+        unsat, discard = self._check(not_constraints)
         for key in discard:
-            counter["neg.unknown"] += 1
             pending.pop(key)
-        for key in accepted:
-            counter["neg.unsat"] += 1
+        for key in unsat:
             c = pending.pop(key)
-            self._pending_invalid.pop(key, None)
-            c.valid = True
-            logger.debug(f"Accepted: {c.term}")
-            self.refiner.mark_valid(c.term, True)
+            self._pending[not valid].pop(key, None)
+            c.valid = valid
+            action = "Accepted" if valid else "Rejected"
+            logger.debug(f"{action}: {c.term}")
+            self.refiner.mark_valid(c.term, valid)
             lemma_forall(self.solver, c.holes, c.constraint)
-            self._new_solutions.append(c)
+            self._new_facts[c.term] = valid
 
     def _check(self, formulas: dict[str, z3.ExprRef]) -> tuple[set[str], set[str]]:
         """
