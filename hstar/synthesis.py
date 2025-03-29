@@ -73,7 +73,6 @@ class Synthesizer(SynthesizerBase):
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.timeout_ms = timeout_ms  # for hstar use only
-        self.lemmas: list[z3.ExprRef] = []
         add_theory(self.solver)
 
     def step(self) -> tuple[Term, bool | None]:
@@ -142,13 +141,12 @@ class BatchingSynthesizer(SynthesizerBase):
     ) -> None:
         self.sketch = sketch
         self.constraint = constraint
+        self.batch_size = batch_size
         self.refiner = Refiner(sketch)
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.set("unsat_core", True)
         self.solver.timeout_ms = timeout_ms
-        self.batch_size = batch_size
-        self.lemmas: list[z3.ExprRef] = []
         add_theory(self.solver)
 
         # Candidates remain pending until either they are decided or hit a timeout.
