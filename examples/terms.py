@@ -6,6 +6,7 @@ This script prints λ-join-calculus terms in order of increasing complexity.
 """
 
 import argparse
+import random
 
 from hstar.enumeration import enumerator
 from hstar.normal import complexity, is_closed, is_linear
@@ -26,7 +27,8 @@ def main(args: argparse.Namespace) -> None:
         if args.nonlinear and is_linear(term):
             continue
 
-        print(f"{complexity(term)}\t{term}")
+        if args.prob >= 1 or random.random() < args.prob:
+            print(f"{complexity(term)}\t{term}")
         count += 1
         if count >= args.number:
             break
@@ -53,6 +55,13 @@ group.add_argument(
     "--nonlinear",
     action="store_true",
     help="Only show non-linear terms",
+)
+parser.add_argument(
+    "--prob",
+    "-p",
+    type=float,
+    default=1.0,
+    help="Probability of printing a term",
 )
 
 if __name__ == "__main__":

@@ -83,6 +83,13 @@ class TermType(Enum):
     APP = 3
 
 
+class Precedence(Enum):
+    APP_HEAD = 0
+    APP_BODY = 1
+    ABS = 2
+    JOIN = 3
+
+
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class _Term(metaclass=HashConsMeta):
     """A join-free linear normal form."""
@@ -107,36 +114,31 @@ class _Term(metaclass=HashConsMeta):
             return f"ABS({repr(self.head)})"
         raise ValueError(f"unexpected term type: {self.typ}")
 
-    @weak_key_cache
     def __str__(self) -> str:
+        return self.pretty(Precedence.JOIN)
+
+    @weak_key_cache
+    def pretty(self, context: Precedence) -> str:
         if self.typ == TermType.TOP:
             return "⊤"
         if self.typ == TermType.VAR:
             return str(self.varname)
         if self.typ == TermType.ABS:
             assert self.head is not None
-            return f"λ {self.head}"
+            result = self.head.pretty(Precedence.ABS)
+            result = f"λ {result}"
+            if context == Precedence.APP_HEAD or context == Precedence.APP_BODY:
+                result = f"({result})"
+            return result
         if self.typ == TermType.APP:
             assert self.head is not None
             assert self.body is not None
-
-            # Apply parentheses based on precedence
-            head_str = str(self.head)
-            if self.head.typ == TermType.ABS:
-                head_str = f"({head_str})"
-
-            body_str = str(self.body)
-            # Add parentheses to body if it contains a join
-            if len(self.body.parts) > 1:
-                body_str = f"({body_str})"
-            # Add parentheses to body if it's an application (right associativity)
-            elif (
-                len(self.body.parts) == 1
-                and next(iter(self.body.parts)).typ == TermType.APP
-            ):
-                body_str = f"({body_str})"
-
-            return f"{head_str} {body_str}"
+            head_str = self.head.pretty(Precedence.APP_HEAD)
+            body_str = self.body.pretty(Precedence.APP_BODY)
+            result = f"{head_str} {body_str}"
+            if context == Precedence.APP_BODY:
+                result = f"({result})"
+            return result
 
         raise ValueError(f"unexpected term type: {self.typ}")
 
@@ -163,16 +165,23 @@ class Term(metaclass=HashConsMeta):
             return repr(next(iter(self.parts)))
         return f"JOIN({', '.join(sorted(map(repr, self.parts)))})"
 
-    @weak_key_cache
     def __str__(self) -> str:
+        return self.pretty(Precedence.JOIN)
+
+    @weak_key_cache
+    def pretty(self, context: Precedence) -> str:
         if not self.parts:
             return "⊥"
         if len(self.parts) == 1:
-            return str(next(iter(self.parts)))
+            part = next(iter(self.parts))
+            return part.pretty(context)
 
         # Sort parts for consistent output
         sorted_parts = sorted(self.parts)
-        return " | ".join(str(part) for part in sorted_parts)
+        result = " | ".join(part.pretty(Precedence.JOIN) for part in sorted_parts)
+        if context != Precedence.JOIN:
+            result = f"({result})"
+        return result
 
     def __lt__(self, other: "Term") -> bool:
         self_key = (complexity(self), repr(self))
