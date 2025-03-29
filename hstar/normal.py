@@ -825,3 +825,13 @@ def beta_ball(term: Term, radius: int) -> set[Term]:
     for r in range(1, radius + 1):
         result.update(beta_shell(term, r))
     return result
+
+
+def compress_free_vars(term: Term) -> Term:
+    """
+    Compresses free variables in a term to the smallest possible indices.
+    """
+    if not term.free_vars:
+        return term
+    env: Env = Env({k: VAR(i) for i, k in enumerate(sorted(term.free_vars))})
+    return subst(term, env)

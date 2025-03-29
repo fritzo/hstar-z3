@@ -28,7 +28,7 @@ from .normal import (
     Env,
     Term,
     complexity,
-    env_compose,
+    compress_free_vars,
     subst,
     subst_complexity,
 )
@@ -173,11 +173,11 @@ class Refiner:
     """
 
     def __init__(self, sketch: Term, on_fact: Callable[[Term, bool], None]) -> None:
-        self.on_fact = on_fact
         # Persistent state.
+        self.on_fact = on_fact
         self._sketch = sketch
-        self._nodes: dict[Term, Env] = {sketch: Env()}  # (candidate, env) -> env
         self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
+        self._specialize[sketch].add(sketch)
         self._validity: dict[Term, bool] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
@@ -202,7 +202,7 @@ class Refiner:
         open terms may be neither universally valid nor universally invalid.
         """
         counter["refiner.mark_valid"] += 1
-        assert candidate in self._nodes
+        assert candidate in self._specialize
         # Propagate validity to specializations.
         pending = {candidate}
         while pending:
@@ -231,11 +231,12 @@ class Refiner:
         # Specialize the term via every env of complexity c.
         for env in env_enumerator(general.free_vars).level(level):
             special = subst(general, env)
+            special = compress_free_vars(special)
             # Note special may be more or less complex than the pair complexity,
             # due to eager linear reduction.
-            if special in self._nodes:
+            if special in self._specialize:
                 continue
-            self._nodes[special] = env_compose(self._nodes[general], env)
+            self._specialize[special].add(special)
             self._add_edge(general, special)
             heapq.heappush(self._candidate_heap, special)
             if special.free_vars:
@@ -257,12 +258,10 @@ class Refiner:
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
-        for special, env in self._nodes.items():
-            assert subst(self._sketch, env) == special
         for general, specials in self._specialize.items():
             for special in specials:
                 valid = self._validity.get(general)
                 if valid is not None:
                     assert self._validity.get(special) is valid
         for candidate in self._validity:
-            assert candidate in self._nodes
+            assert candidate in self._specialize

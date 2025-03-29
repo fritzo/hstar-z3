@@ -79,7 +79,7 @@ class Synthesizer(SynthesizerBase):
         """Performs a unit of inference work."""
         counter["synthesizer.step"] += 1
         candidate = self.refiner.next_candidate()
-        logger.debug(f"Checking candidate: {candidate}")
+        logger.debug(f"Checking: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
         not_constraint = Not(constraint)
@@ -97,7 +97,7 @@ class Synthesizer(SynthesizerBase):
         # which means the original constraint is universally valid.
         if self._is_unsat(not_constraint):
             counter["neg.unsat"] += 1
-            logger.debug(f"Found solution: {candidate}")
+            logger.debug(f"Accepted: {candidate}")
             self.refiner.mark_valid(candidate, True)
             # By DeMorgan's law: ¬∃x.¬φ(x) ≡ ∀x.φ(x)
             lemma_forall(self.solver, holes, constraint)
