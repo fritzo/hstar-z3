@@ -190,27 +190,19 @@ class Refiner:
         """Mark a candidate as valid or invalid."""
         counter["refiner.mark_valid"] += 1
         assert candidate in self._nodes
+        # Propagate validity to generalizations or invalidity to specializations.
+        neighbors = self._generalize if validity else self._specialize
         pending = {candidate}
-        if validity:
-            # Propagate validity upward to generalizations.
-            while pending:
-                general = pending.pop()
-                old = self._validity.get(general)
-                if old is None:
-                    self._validity[general] = True
-                    pending.update(self._generalize[general])
-                elif old is False:
-                    raise ValueError("contradiction")
-        else:
-            # Propagate invalidity downward to specializations.
-            while pending:
-                special = pending.pop()
-                old = self._validity.get(special)
-                if old is None:
-                    self._validity[special] = False
-                    pending.update(self._specialize[special])
-                elif old is False:
-                    raise ValueError("contradiction")
+        while pending:
+            current = pending.pop()
+            old = self._validity.get(current)
+            if old is None:
+                self._validity[current] = validity
+                pending.update(neighbors[current])
+            elif old is not validity:
+                raise ValueError(
+                    f"contradiction: {candidate} is {validity} but {current} is {old}"
+                )
 
     def revisit_candidates(self, valid: bool) -> list[Term]:
         """Return a list of previous candidates with given validity."""
