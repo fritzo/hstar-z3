@@ -195,10 +195,7 @@ class BatchingSynthesizer(SynthesizerBase):
         counter["batch_synthesizer.invalid"] += 1
         logger.debug("Checking claims")
         pending = self._pending[valid]
-        keys = sorted(pending.keys())
-        # A claim is true if its negation is unsatisfiable.
-        not_constraints = {key: pending[key].not_constraint for key in keys}
-        unsat, discard = self._check(not_constraints)
+        unsat, discard = self._check(pending)
         for key in discard:
             pending.pop(key)
         for key in unsat:
@@ -208,49 +205,58 @@ class BatchingSynthesizer(SynthesizerBase):
             action = "Accepted" if valid else "Rejected"
             logger.debug(f"{action}: {c.term}")
             self.refiner.mark_valid(c.term, valid)
-            lemma_forall(self.solver, c.holes, c.constraint)
             self._new_facts[c.term] = valid
 
-    def _check(self, formulas: dict[str, z3.ExprRef]) -> tuple[set[str], set[str]]:
+    def _check(self, claims: dict[str, Claim]) -> tuple[set[str], set[str]]:
         """
-        Returns (unsat,discard) formulas. Remaining formulas should be retried.
+        Returns (unsat, discard) claim keys. Remaining claims should be retried.
+
+        Args:
+            claims: Dictionary mapping keys to Claim objects to check
+        Returns:
+            A tuple of two sets of keys: (unsat, discard)
         """
-        # Assume the query is convex, i.e. if any subset of the formulas is
-        # unsatisfiable, then at least one of the formulas is unsatisfiable.
+        # Assume the query is convex, i.e. if any subset of the claims is
+        # unsatisfiable, then at least one of the claims is unsatisfiable.
         unsat: set[str] = set()
         discard: set[str] = set()
 
-        # Base case is a single formula.
-        if len(formulas) == 1:
-            # Check whether the single formula is unsatisfiable.
-            if self.solver.check(*formulas.values()) != z3.unsat:
-                discard.update(formulas)
+        # Base case is a single claim.
+        if len(claims) == 1:
+            key = next(iter(claims))
+            claim = claims[key]
+            # Check whether the claim is valid.
+            if self.solver.check(claim.not_constraint) != z3.unsat:
+                discard.add(key)
                 return unsat, discard
-            unsat.update(formulas)
+            lemma_forall(self.solver, claim.holes, claim.constraint)
+            unsat.add(key)
             return unsat, discard
 
-        # Check whether any formula is unsatisfiable, and examine the unsat core.
+        # Check whether any claim is valid, and examine the unsat core.
         with self.solver:
-            for name, formula in formulas.items():
-                self.solver.assert_and_track(formula, name)
+            for key, claim in claims.items():
+                self.solver.assert_and_track(claim.not_constraint, key)
             if self.solver.check() != z3.unsat:
-                discard.update(formulas)
+                discard.update(claims.keys())
                 return unsat, discard
             unsat_core = self.solver.unsat_core()
-        maybe_unsat = set(map(str, unsat_core)) & set(formulas)
+        maybe_unsat = set(map(str, unsat_core)) & set(claims.keys())
         assert maybe_unsat
 
-        # If a single formula is unsatisfiable, then it is to blame.
+        # If a single claim is unsatisfiable, then it is to blame.
         if len(maybe_unsat) == 1:
-            unsat.update(maybe_unsat)
+            key = next(iter(maybe_unsat))
+            claim = claims[key]
+            lemma_forall(self.solver, claim.holes, claim.constraint)
+            unsat.add(key)
             return unsat, discard
 
-        # Recurse.
+        # Divide suspects and interrogate separately.
         keys = sorted(maybe_unsat)
-        x = {k: formulas[k] for k in keys[: len(keys) // 2]}
-        y = {k: formulas[k] for k in keys[len(keys) // 2 :]}
+        x = {k: claims[k] for k in keys[: len(keys) // 2]}
+        y = {k: claims[k] for k in keys[len(keys) // 2 :]}
         unsat_x, discard_x = self._check(x)
-        # TODO move lemma_forall here, rather than later
         unsat_y, discard_y = self._check(y)
         unsat.update(unsat_x, unsat_y)
         discard.update(discard_x, discard_y)
