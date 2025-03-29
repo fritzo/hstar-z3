@@ -85,7 +85,10 @@ class Synthesizer(SynthesizerBase):
             validity could not be determined.
         """
         counter["synthesizer.step"] += 1
-        candidate = self.refiner.next_candidate()
+        candidate, valid = self.refiner.next_candidate()
+        if valid is not None:
+            # Candidate merely specializes a previous candidate.
+            return candidate, valid
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
@@ -168,56 +171,56 @@ class BatchingSynthesizer(SynthesizerBase):
             for valid in (False, True):
                 while max(map(len, self._pending)) < self.batch_size:
                     self._add_candidate()
+                    if self._new_facts:
+                        return self._new_facts.popitem()
                 if self._pending[valid]:
                     self._step(valid)
-        term, valid = self._new_facts.popitem()
-        assert valid is not None
-        return term, valid
+        return self._new_facts.popitem()
 
     def _add_candidate(self) -> None:
-        candidate = self.refiner.next_candidate()
-        logger.debug(f"Proposing candidate: {candidate}")
+        candidate, valid = self.refiner.next_candidate()
+        if valid is not None:
+            # Candidate merely specializes a previous candidate.
+            action = "Accepted" if valid else "Rejected"
+            logger.debug(f"{action}: {candidate}")
+            self._new_facts[candidate] = valid
+            return
+        logger.debug(f"Checking: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
         key = f"candidate_{self._next_id}"
         self._next_id += 1
-        c = Claim(
+        claim = Claim(
             term=candidate,
             holes=holes,
             constraint=constraint,
             not_constraint=Not(constraint),
         )
-        self._pending[True][key] = c
-        self._pending[False][key] = c.negate()
+        self._pending[True][key] = claim
+        self._pending[False][key] = claim.negate()
 
     def _step(self, valid: bool) -> None:
         counter["batch_synthesizer.invalid"] += 1
-        logger.debug("Checking claims")
         pending = self._pending[valid]
-        unsat, discard = self._check(pending)
+        proved, discard = self._check(pending)
         for key in discard:
             pending.pop(key)
-        for key in unsat:
-            c = pending.pop(key)
+        for key in proved:
+            claim = pending.pop(key)
             self._pending[not valid].pop(key, None)
-            c.valid = valid
+            claim.valid = valid
             action = "Accepted" if valid else "Rejected"
-            logger.debug(f"{action}: {c.term}")
-            self.refiner.mark_valid(c.term, valid)
-            self._new_facts[c.term] = valid
+            logger.debug(f"{action}: {claim.term}")
+            self.refiner.mark_valid(claim.term, valid)
+            self._new_facts[claim.term] = valid
 
     def _check(self, claims: dict[str, Claim]) -> tuple[set[str], set[str]]:
         """
-        Returns (unsat, discard) claim keys. Remaining claims should be retried.
-
-        Args:
-            claims: Dictionary mapping keys to Claim objects to check
-        Returns:
-            A tuple of two sets of keys: (unsat, discard)
+        Returns (proved, discard) claim keys. Remaining claims should be retried.
         """
         # Assume the query is convex, i.e. if any subset of the claims is
         # unsatisfiable, then at least one of the claims is unsatisfiable.
-        unsat: set[str] = set()
+        proved: set[str] = set()
         discard: set[str] = set()
 
         # Base case is a single claim.
@@ -227,10 +230,10 @@ class BatchingSynthesizer(SynthesizerBase):
             # Check whether the claim is valid.
             if self.solver.check(claim.not_constraint) != z3.unsat:
                 discard.add(key)
-                return unsat, discard
+                return proved, discard
             lemma_forall(self.solver, claim.holes, claim.constraint)
-            unsat.add(key)
-            return unsat, discard
+            proved.add(key)
+            return proved, discard
 
         # Check whether any claim is valid, and examine the unsat core.
         with self.solver:
@@ -238,7 +241,7 @@ class BatchingSynthesizer(SynthesizerBase):
                 self.solver.assert_and_track(claim.not_constraint, key)
             if self.solver.check() != z3.unsat:
                 discard.update(claims.keys())
-                return unsat, discard
+                return proved, discard
             unsat_core = self.solver.unsat_core()
         maybe_unsat = set(map(str, unsat_core)) & set(claims.keys())
         assert maybe_unsat
@@ -248,8 +251,8 @@ class BatchingSynthesizer(SynthesizerBase):
             key = next(iter(maybe_unsat))
             claim = claims[key]
             lemma_forall(self.solver, claim.holes, claim.constraint)
-            unsat.add(key)
-            return unsat, discard
+            proved.add(key)
+            return proved, discard
 
         # Divide suspects and interrogate separately.
         keys = sorted(maybe_unsat)
@@ -257,9 +260,9 @@ class BatchingSynthesizer(SynthesizerBase):
         y = {k: claims[k] for k in keys[len(keys) // 2 :]}
         unsat_x, discard_x = self._check(x)
         unsat_y, discard_y = self._check(y)
-        unsat.update(unsat_x, unsat_y)
+        proved.update(unsat_x, unsat_y)
         discard.update(discard_x, discard_y)
-        return unsat, discard
+        return proved, discard
 
 
 # FIXME the correct instance may not be the last instance.

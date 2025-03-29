@@ -176,12 +176,13 @@ class Refiner:
         self._growth_heap: list[tuple[int, int, Term]] = []
         self._start_refining(sketch)
 
-    def next_candidate(self) -> Term:
+    def next_candidate(self) -> tuple[Term, bool | None]:
         """Return the next candidate term to check."""
         counter["refiner.next_candidate"] += 1
         while not self._candidate_heap:
             self._grow()
-        return heapq.heappop(self._candidate_heap)
+        term = heapq.heappop(self._candidate_heap)
+        return term, self._validity.get(term)
 
     def mark_valid(self, candidate: Term, validity: bool) -> None:
         """Mark a candidate as universally valid or universally invalid."""

@@ -49,7 +49,8 @@ def test_refiner() -> None:
     refiner = Refiner(sketch)
     refiner.validate()
     for _ in range(100):
-        candidate = refiner.next_candidate()
+        candidate, valid = refiner.next_candidate()
         logger.debug(candidate)
         assert isinstance(candidate, Term)
+        assert valid is None  # since .mark_valid() was never called
         refiner.validate()
