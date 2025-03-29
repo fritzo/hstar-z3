@@ -5,12 +5,11 @@ import pytest
 from immutables import Map
 
 from hstar.enumeration import (
-    EnvRefiner,
     Refiner,
     enumerator,
     env_enumerator,
 )
-from hstar.normal import ABS, APP, VAR, Env, Term, app, complexity, env_free_vars
+from hstar.normal import ABS, APP, VAR, Env, Term, complexity
 
 logger = logging.getLogger(__name__)
 
@@ -53,22 +52,4 @@ def test_refiner() -> None:
         candidate = refiner.next_candidate()
         logger.debug(candidate)
         assert isinstance(candidate, Term)
-        refiner.validate()
-
-
-@pytest.mark.timeout(0.2)
-def test_env_refiner() -> None:
-    sketch = Env(
-        {
-            0: ABS(ABS(ABS(app(VAR(2), VAR(0), VAR(1))))),  # pair
-            1: app(VAR(0), VAR(2), VAR(3)),  # <r,s>
-        }
-    )
-    assert env_free_vars(sketch) == Map({2: 1, 3: 1})
-    refiner = EnvRefiner(sketch)
-    refiner.validate()
-    for _ in range(100):
-        candidate = refiner.next_candidate()
-        logger.debug(candidate)
-        assert isinstance(candidate, Env)
         refiner.validate()

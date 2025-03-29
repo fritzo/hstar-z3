@@ -27,9 +27,7 @@ from .normal import (
     Env,
     Term,
     complexity,
-    env_complexity,
     env_compose,
-    env_free_vars,
     subst,
     subst_complexity,
 )
@@ -171,7 +169,6 @@ class Refiner:
         # Persistent state.
         self._sketch = sketch
         self._nodes: dict[Term, Env] = {sketch: Env()}  # (candidate, env) -> env
-        self._generalize: dict[Term, set[Term]] = defaultdict(set)  # special -> general
         self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
         self._validity: dict[Term, bool] = {}
         # Ephemeral state, used while growing.
@@ -187,18 +184,17 @@ class Refiner:
         return heapq.heappop(self._candidate_heap)
 
     def mark_valid(self, candidate: Term, validity: bool) -> None:
-        """Mark a candidate as valid or invalid."""
+        """Mark a candidate as universally valid or universally invalid."""
         counter["refiner.mark_valid"] += 1
         assert candidate in self._nodes
-        # Propagate validity to generalizations or invalidity to specializations.
-        neighbors = self._generalize if validity else self._specialize
+        # Propagate validity to specializations.
         pending = {candidate}
         while pending:
             current = pending.pop()
             old = self._validity.get(current)
             if old is None:
                 self._validity[current] = validity
-                pending.update(neighbors[current])
+                pending.update(self._specialize[current])
             elif old is not validity:
                 raise ValueError(
                     f"contradiction: {candidate} is {validity} but {current} is {old}"
@@ -240,147 +236,20 @@ class Refiner:
 
     def _add_edge(self, general: Term, special: Term) -> None:
         counter["refiner.add_edge"] += 1
-        self._generalize[special].add(general)
         self._specialize[general].add(special)
         # Propagate validity along the new edge.
-        if self._validity.get(special) is True:
-            if self._validity.get(general) is None:
-                self.mark_valid(general, True)
-        if self._validity.get(general) is False:
-            if self._validity.get(special) is None:
-                self.mark_valid(special, False)
+        valid = self._validity.get(general)
+        if valid is not None:
+            self.mark_valid(general, valid)
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
         for special, env in self._nodes.items():
             assert subst(self._sketch, env) == special
-        for special, generals in self._generalize.items():
-            for general in generals:
-                assert special in self._specialize[general]
-                if self._validity.get(special) is True:
-                    assert self._validity.get(general) is True
         for general, specials in self._specialize.items():
             for special in specials:
-                assert general in self._generalize[special]
-                if self._validity.get(general) is False:
-                    assert self._validity.get(special) is False
-        for candidate in self._validity:
-            assert candidate in self._nodes
-
-
-class EnvRefiner:
-    """
-    Data structure representing the DAG of refinements of an environment sketch,
-    propagating validity along general-special edges.
-
-    Warning: Candidates are yielded in approximately but not exactly increasing
-    order of complexity. This is because the exploration queue is ordered by the
-    complexity of unevaluated substitution pairs `(candidate,env)`, but
-    `env_compose(candidate,env)` may be more or less complex than the pair
-    complexity, due to eager linear reduction.
-    """
-
-    def __init__(self, sketch: Env) -> None:
-        # Persistent state.
-        self._sketch = sketch
-        self._free_vars = env_free_vars(sketch)
-        self._nodes: dict[Env, Env] = {sketch: Env()}  # (candidate, env) -> env
-        self._generalize: dict[Env, set[Env]] = defaultdict(set)  # special -> general
-        self._specialize: dict[Env, set[Env]] = defaultdict(set)  # general -> special
-        self._validity: dict[Env, bool] = {}
-        # Ephemeral state, used while growing.
-        self._candidate_heap: list[Env] = [sketch]
-        self._growth_heap: list[tuple[int, int, Env]] = []
-        self._start_refining(sketch)
-
-    def next_candidate(self) -> Env:
-        """Return the next candidate environment to check."""
-        counter["env_refiner.next_candidate"] += 1
-        while not self._candidate_heap:
-            self._grow()
-        return heapq.heappop(self._candidate_heap)
-
-    def mark_valid(self, candidate: Env, validity: bool) -> None:
-        """Mark a candidate as valid or invalid."""
-        counter["env_refiner.mark_valid"] += 1
-        assert candidate in self._nodes
-        pending = {candidate}
-        if validity:
-            # Propagate validity upward to generalizations.
-            while pending:
-                general = pending.pop()
-                old = self._validity.get(general)
-                if old is None:
-                    self._validity[general] = True
-                    pending.update(self._generalize[general])
-                elif old is False:
-                    raise ValueError("contradiction")
-        else:
-            # Propagate invalidity downward to specializations.
-            while pending:
-                special = pending.pop()
-                old = self._validity.get(special)
-                if old is None:
-                    self._validity[special] = False
-                    pending.update(self._specialize[special])
-                elif old is False:
-                    raise ValueError("contradiction")
-
-    def _grow(self) -> None:
-        """Grow the refinement DAG."""
-        counter["env_refiner.grow"] += 1
-        # Find an environment to refine.
-        if not self._growth_heap:
-            raise StopIteration("EnvRefiner is exhausted.")
-        c, level, general = heapq.heappop(self._growth_heap)
-        if self._validity.get(general) is False:
-            return
-        heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
-
-        # Specialize the environment via every env of complexity c.
-        for env in env_enumerator(env_free_vars(general)).level(level):
-            special = env_compose(general, env)
-            # Note special may be more or less complex than the pair complexity,
-            # due to eager linear reduction.
-            if special in self._nodes:
-                continue
-            self._nodes[special] = env_compose(self._nodes[general], env)
-            self._add_edge(general, special)
-            heapq.heappush(self._candidate_heap, special)
-            if env_free_vars(special):
-                self._start_refining(special)
-
-    def _start_refining(self, general: Env) -> None:
-        assert env_free_vars(general), "cannot refine a closed environment"
-        level = 0
-        c = env_complexity(general) + env_enumerator(env_free_vars(general)).baseline
-        heapq.heappush(self._growth_heap, (c, level, general))
-
-    def _add_edge(self, general: Env, special: Env) -> None:
-        counter["env_refiner.add_edge"] += 1
-        self._generalize[special].add(general)
-        self._specialize[general].add(special)
-        # Propagate validity along the new edge.
-        if self._validity.get(special) is True:
-            if self._validity.get(general) is None:
-                self.mark_valid(general, True)
-        if self._validity.get(general) is False:
-            if self._validity.get(special) is None:
-                self.mark_valid(special, False)
-
-    def validate(self) -> None:
-        """Validate the refinement DAG, for testing."""
-        for special, env in self._nodes.items():
-            assert env_compose(self._sketch, env) == special
-        for special, generals in self._generalize.items():
-            for general in generals:
-                assert special in self._specialize[general]
-                if self._validity.get(special) is True:
-                    assert self._validity.get(general) is True
-        for general, specials in self._specialize.items():
-            for special in specials:
-                assert general in self._generalize[special]
-                if self._validity.get(general) is False:
-                    assert self._validity.get(special) is False
+                valid = self._validity.get(general)
+                if valid is not None:
+                    assert self._validity.get(special) is valid
         for candidate in self._validity:
             assert candidate in self._nodes

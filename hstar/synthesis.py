@@ -15,11 +15,10 @@ import z3
 from z3 import ForAll, Not
 
 from . import language
-from .enumeration import EnvRefiner, Refiner
+from .enumeration import Refiner
 from .grammars import Grammar
 from .metrics import COUNTERS
-from .normal import Env, Term
-from .solvers import try_prove
+from .normal import Term
 from .theory import add_theory
 
 logger = logging.getLogger(__name__)
@@ -261,44 +260,6 @@ class BatchingSynthesizer(SynthesizerBase):
         unsat.update(unsat_x, unsat_y)
         discard.update(discard_x, discard_y)
         return unsat, discard
-
-
-class EnvSynthesizer:
-    """
-    A synthesis algorithm that searches through refinements of a sketch.
-
-    Args:
-        sketch: The environment sketch to refine.
-        constraint: A function that takes a candidate env and returns a Z3
-            expression representing a constraint on the candidate.
-    """
-
-    def __init__(self, sketch: Env, constraint: Callable[[Env], z3.ExprRef]) -> None:
-        self.sketch = sketch
-        self.constraint = constraint
-        self.refiner = EnvRefiner(sketch)
-        self.solver = z3.Solver()
-        add_theory(self.solver)
-
-    def step(self, *, timeout_ms: int = 1000) -> tuple[Env, bool | None]:
-        """
-        Generate the next candidate and check it.
-
-        Returns:
-            A tuple `(candidate,valid)` where `candidate` is the next candidate
-            sketch (possibly with holes) and `valid` is a boolean indicating
-            whether the candidate satisfies the constraint
-        """
-        # TODO update to be closer to Synthesizer.step().
-        counter["env_synthesizer.step"] += 1
-        candidate = self.refiner.next_candidate()
-        logger.debug(f"Checking candidate: {candidate}")
-        constraint = self.constraint(candidate)
-        valid, _ = try_prove(self.solver, constraint, timeout_ms=timeout_ms)
-        if valid is not None:
-            self.refiner.mark_valid(candidate, valid)
-            self.solver.add(constraint if valid else Not(constraint))
-        return candidate, valid
 
 
 # FIXME the correct instance may not be the last instance.
