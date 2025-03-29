@@ -29,15 +29,20 @@ def main(args: argparse.Namespace) -> None:
     def constraint(candidate: Term) -> z3.ExprRef:
         return CONV(nf_to_z3(candidate))
 
-    synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
+    def on_fact(term: Term, valid: bool) -> None:
+        if valid:
+            logger.info(f"Found convergent term: {term}")
+
+    synthesizer = Synthesizer(
+        sketch,
+        constraint,
+        on_fact,
+        timeout_ms=args.timeout_ms,
+    )
 
     logger.info(f"Synthesizing convergent terms with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
-        candidate, valid = synthesizer.step()
-        if not valid or candidate.free_vars:
-            continue
-
-        logger.info(f"Found convergent term: {candidate}")
+        synthesizer.step()
 
 
 parser = argparse.ArgumentParser(

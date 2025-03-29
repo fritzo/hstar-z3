@@ -46,14 +46,20 @@ def main(args: argparse.Namespace) -> None:
     def constraint(candidate: normal.Term) -> z3.ExprRef:
         return SIMPLE == nf_to_z3(candidate)
 
-    synthesizer = Synthesizer(ast_to_nf(sketch), constraint, timeout_ms=args.timeout_ms)
+    def on_fact(term: normal.Term, valid: bool) -> None:
+        if valid:
+            logger.info(f"Found potential SIMPLE type: {term}")
+
+    synthesizer = Synthesizer(
+        ast_to_nf(sketch),
+        constraint,
+        on_fact,
+        timeout_ms=args.timeout_ms,
+    )
 
     logger.info(f"Synthesizing SIMPLE type with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
-        candidate, valid = synthesizer.step()
-        if not valid or candidate.free_vars:
-            continue
-        logger.info(f"Potential SIMPLE implementation: {candidate}")
+        synthesizer.step()
 
 
 parser = argparse.ArgumentParser(

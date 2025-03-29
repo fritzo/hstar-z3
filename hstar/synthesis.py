@@ -45,7 +45,7 @@ def lemma_forall(solver: z3.Solver, holes: list[z3.ExprRef], lemma: z3.ExprRef) 
 
 class SynthesizerBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def step(self) -> tuple[Term, bool | None]:
+    def step(self) -> None:
         """Generate the next candidate and check it."""
 
 
@@ -63,59 +63,44 @@ class Synthesizer(SynthesizerBase):
         self,
         sketch: Term,
         constraint: Callable[[Term], z3.ExprRef],
+        on_fact: Callable[[Term, bool], None],
         *,
         timeout_ms: int = 1000,
     ) -> None:
         self.sketch = sketch
         self.constraint = constraint
-        self.refiner = Refiner(sketch)
+        self.refiner = Refiner(sketch, on_fact)
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.timeout_ms = timeout_ms  # for hstar use only
         add_theory(self.solver)
 
-    def step(self) -> tuple[Term, bool | None]:
-        """
-        Generate the next candidate and check it.
-
-        Returns:
-            A tuple `(candidate, valid)` where `candidate` is the next candidate
-            sketch (possibly with holes) and `valid` is a boolean indicating
-            whether the candidate satisfies the constraint, or None if the
-            validity could not be determined.
-        """
+    def step(self) -> None:
+        """Performs a unit of inference work."""
         counter["synthesizer.step"] += 1
-        candidate, valid = self.refiner.next_candidate()
-        if valid is not None:
-            # Candidate merely specializes a previous candidate.
-            return candidate, valid
+        candidate = self.refiner.next_candidate()
         logger.debug(f"Checking candidate: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
         not_constraint = Not(constraint)
 
         # Check if the constraint is unsatisfiable,
-        # which means the candidate is invalid.
+        # which means the candidate is universally invalid.
         if self._is_unsat(constraint):
             counter["pos.unsat"] += 1
             logger.debug(f"Rejected: {candidate}")
             self.refiner.mark_valid(candidate, False)
             # By DeMorgan's law: ¬∃x.φ(x) ≡ ∀x.¬φ(x)
             lemma_forall(self.solver, holes, not_constraint)
-            return candidate, False
 
         # Check if the negation of the constraint is unsatisfiable,
-        # which means the original constraint is valid.
+        # which means the original constraint is universally valid.
         if self._is_unsat(not_constraint):
             counter["neg.unsat"] += 1
             logger.debug(f"Found solution: {candidate}")
             self.refiner.mark_valid(candidate, True)
             # By DeMorgan's law: ¬∃x.¬φ(x) ≡ ∀x.φ(x)
             lemma_forall(self.solver, holes, constraint)
-            return candidate, True
-
-        # The solver couldn't determine validity within the timeout.
-        return candidate, None
 
     def _is_unsat(self, formula: z3.ExprRef) -> bool:
         # We expect sat to never occur, as our base theory has no finite model,
@@ -146,14 +131,15 @@ class BatchingSynthesizer(SynthesizerBase):
         self,
         sketch: Term,
         constraint: Callable[[Term], z3.ExprRef],
+        on_fact: Callable[[Term, bool], None],
         *,
         batch_size: int = 1,
         timeout_ms: int = 1000,
     ) -> None:
         self.sketch = sketch
         self.constraint = constraint
+        self.refiner = Refiner(sketch, on_fact)
         self.batch_size = batch_size
-        self.refiner = Refiner(sketch)
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.set("unsat_core", True)
@@ -163,31 +149,19 @@ class BatchingSynthesizer(SynthesizerBase):
         # Candidates remain pending until either they are decided or hit a timeout.
         self._next_id = 0
         self._pending: tuple[dict[str, Claim], dict[str, Claim]] = {}, {}
-        self._new_facts: dict[Term, bool] = {}
 
-    def step(self) -> tuple[Term, bool]:
-        """Performs inference until a new fact is learned."""
+    def step(self) -> None:
+        """Performs a unit of inference work."""
         counter["batch_synthesizer.step"] += 1
-        while not self._new_facts:
-            for valid in (False, True):
-                while max(map(len, self._pending)) < self.batch_size:
-                    self._add_candidate()
-                    if self._new_facts:
-                        return self._new_facts.popitem()
-                if self._pending[valid]:
-                    self._step(valid)
-        return self._new_facts.popitem()
+        for valid in (False, True):
+            while max(map(len, self._pending)) < self.batch_size:
+                self._add_candidate()
+            if self._pending[valid]:
+                self._step(valid)
 
     def _add_candidate(self) -> None:
         counter["batch_synthesizer.add_candidate"] += 1
-        candidate, valid = self.refiner.next_candidate()
-        if valid is not None:
-            # Candidate merely specializes a previous candidate.
-            counter["batch_synthesizer.specialize"] += 1
-            action = "Accepted" if valid else "Rejected"
-            logger.debug(f"{action}: {candidate}")
-            self._new_facts[candidate] = valid
-            return
+        candidate = self.refiner.next_candidate()
         logger.debug(f"Checking: {candidate}")
         constraint = self.constraint(candidate)
         holes, constraint = language.hole_closure(constraint)
@@ -214,8 +188,7 @@ class BatchingSynthesizer(SynthesizerBase):
             claim.valid = valid
             action = "Accepted" if valid else "Rejected"
             logger.debug(f"{action}: {claim.term}")
-            self.refiner.mark_valid(claim.term, valid)
-            self._new_facts[claim.term] = valid
+            self.refiner.mark_valid(claim.term, valid)  # TODO move into _check
 
     def _check(self, claims: dict[str, Claim]) -> tuple[set[str], set[str]]:
         """

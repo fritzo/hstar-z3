@@ -23,8 +23,15 @@ def test_synthesizer() -> None:
         rhs = ABS(VAR(0))
         return LEQ(nf_to_z3(lhs), nf_to_z3(rhs))
 
-    synthesizer = Synthesizer(sketch, constraint, timeout_ms=10)
+    def on_fact(term: Term, valid: bool) -> None:
+        assert isinstance(term, Term)
+        logger.debug(f"{term}, valid = {valid}")
+
+    synthesizer = Synthesizer(
+        sketch,
+        constraint,
+        on_fact,
+        timeout_ms=10,
+    )
     for _ in range(10):
-        candidate, valid = synthesizer.step()
-        logger.debug(f"{candidate}, valid = {valid}")
-        assert isinstance(candidate, Term)
+        synthesizer.step()

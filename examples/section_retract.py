@@ -53,22 +53,32 @@ def main(args: argparse.Namespace) -> None:
             result = z3.And(result, CONV(nf_to_z3(r)), CONV(nf_to_z3(s)))
         return result
 
+    def on_fact(term: Term, valid: bool) -> None:
+        if valid:
+            r = fst(term)
+            s = snd(term)
+            logger.info(f"Found solution: <{r}, {s}>")
+
     synthesizer: SynthesizerBase
     if args.batch_size == 1:
-        synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
+        synthesizer = Synthesizer(
+            sketch,
+            constraint,
+            on_fact,
+            timeout_ms=args.timeout_ms,
+        )
     else:
         synthesizer = BatchingSynthesizer(
-            sketch, constraint, timeout_ms=args.timeout_ms, batch_size=args.batch_size
+            sketch,
+            constraint,
+            on_fact,
+            timeout_ms=args.timeout_ms,
+            batch_size=args.batch_size,
         )
 
     logger.info(f"Synthesizing with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
-        candidate, valid = synthesizer.step()
-        if not valid or candidate.free_vars:
-            continue
-        r = fst(candidate)
-        s = snd(candidate)
-        logger.info(f"Found solution: <{r}, {s}>")
+        synthesizer.step()
 
 
 parser = argparse.ArgumentParser(

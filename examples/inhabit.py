@@ -38,14 +38,20 @@ def main(args: argparse.Namespace) -> None:
     def constraint(candidate: Term) -> z3.ExprRef:
         return OFTYPE(nf_to_z3(candidate), target_type)
 
-    synthesizer = Synthesizer(sketch, constraint, timeout_ms=args.timeout_ms)
+    def on_fact(term: Term, valid: bool) -> None:
+        if valid:
+            print(f"Found inhabitant: {term}")
+
+    synthesizer = Synthesizer(
+        sketch,
+        constraint,
+        on_fact,
+        timeout_ms=args.timeout_ms,
+    )
 
     print(f"Finding inhabitants of type '{args.type}'")
     while True:
-        candidate, valid = synthesizer.step()
-        if not valid or candidate.free_vars:
-            continue
-        print(f"Found inhabitant: {candidate}")
+        synthesizer.step()
 
 
 parser = argparse.ArgumentParser(

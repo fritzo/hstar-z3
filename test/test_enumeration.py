@@ -45,12 +45,17 @@ def test_env_enumerator(free_vars: dict[int, int]) -> None:
 
 @pytest.mark.timeout(0.1)
 def test_refiner() -> None:
+    facts: list[tuple[Term, bool]] = []
+
+    def on_fact(fact: Term, valid: bool) -> None:
+        facts.append((fact, valid))
+
     sketch = ABS(APP(APP(VAR(0), VAR(1)), VAR(2)))
-    refiner = Refiner(sketch)
+    refiner = Refiner(sketch, on_fact)
     refiner.validate()
     for _ in range(100):
-        candidate, valid = refiner.next_candidate()
+        candidate = refiner.next_candidate()
         logger.debug(candidate)
         assert isinstance(candidate, Term)
-        assert valid is None  # since .mark_valid() was never called
         refiner.validate()
+    assert not facts  # since .mark_valid() was never called

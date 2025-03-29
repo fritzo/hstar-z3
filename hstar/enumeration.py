@@ -1,16 +1,17 @@
 """
-# Linear-normal-forms for λ-join-calculus.
+# Enumeration algorithms for Syntax-Guided Synthesis (SyGuS).
 
-Our behavior synthesis search grammar will be a subset of the λ-join-calculus,
-namely those terms that are in a particular linear normal form, i.e. that are
-simplified wrt a set of rewrite rules.
+This module provides algorithms for enumerating linear normal forms,
+environments thereof, and refinements of term sketches. The enumerators are
+intended for use by synthesis algorithms to explore the space of candidate terms
+satisfying constraints.
 """
 
 import heapq
 import itertools
 import math
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import cache
 
 from immutables import Map
@@ -158,14 +159,21 @@ class Refiner:
     Data structure representing the DAG of refinements of a term sketch,
     propagating validity along general-special edges.
 
-    Warning: Candidates are yielded in approximately but not exactly increasing
-    order of complexity. This is because the exploration queue is ordered by the
-    complexity of unevaluated substitution pairs `(candidate,env)`, but
-    `subst(candidate,env)` may be more or less complex than the pair complexity,
-    due to eager linear reduction.
+    The dataflow is as follows:
+    - A synthesizer pulls candidates from the refiner via `.next_candidate()`.
+    - A synthesizer pushes validity information to the refiner via `.mark_valid()`.
+    - The refiner pushes facts to the synthesizer via the `on_fact()` callback.
+
+    Warning: Candidates are discovered in approximately but not exactly
+    increasing order of complexity. The first reason is that exploration queue
+    is ordered by the complexity of unevaluated substitution pairs
+    `(candidate,env)`, but `subst(candidate,env)` may be more or less complex
+    than the pair complexity, due to eager linear reduction. The second reason
+    is that validity may be learned out of order via `.mark_valid()`.
     """
 
-    def __init__(self, sketch: Term) -> None:
+    def __init__(self, sketch: Term, on_fact: Callable[[Term, bool], None]) -> None:
+        self.on_fact = on_fact
         # Persistent state.
         self._sketch = sketch
         self._nodes: dict[Term, Env] = {sketch: Env()}  # (candidate, env) -> env
@@ -176,16 +184,23 @@ class Refiner:
         self._growth_heap: list[tuple[int, int, Term]] = []
         self._start_refining(sketch)
 
-    def next_candidate(self) -> tuple[Term, bool | None]:
+    def next_candidate(self) -> Term:
         """Return the next candidate term to check."""
         counter["refiner.next_candidate"] += 1
-        while not self._candidate_heap:
-            self._grow()
-        term = heapq.heappop(self._candidate_heap)
-        return term, self._validity.get(term)
+        while True:
+            while not self._candidate_heap:
+                self._grow()
+            term = heapq.heappop(self._candidate_heap)
+            if self._validity.get(term) is None:
+                return term
 
     def mark_valid(self, candidate: Term, validity: bool) -> None:
-        """Mark a candidate as universally valid or universally invalid."""
+        """
+        Mark a candidate as universally valid or universally invalid.
+
+        While closed terms in a complete theory are either valid or invalid,
+        open terms may be neither universally valid nor universally invalid.
+        """
         counter["refiner.mark_valid"] += 1
         assert candidate in self._nodes
         # Propagate validity to specializations.
@@ -196,14 +211,11 @@ class Refiner:
             if old is None:
                 self._validity[current] = validity
                 pending.update(self._specialize[current])
+                self.on_fact(current, validity)
             elif old is not validity:
                 raise ValueError(
                     f"contradiction: {candidate} is {validity} but {current} is {old}"
                 )
-
-    def revisit_candidates(self, valid: bool) -> list[Term]:
-        """Return a list of previous candidates with given validity."""
-        return sorted(c for c in self._nodes if self._validity.get(c) is valid)
 
     def _grow(self) -> None:
         """Grow the refinement DAG."""
@@ -212,7 +224,7 @@ class Refiner:
         if not self._growth_heap:
             raise StopIteration("Refiner is exhausted.")
         c, level, general = heapq.heappop(self._growth_heap)
-        if self._validity.get(general) is False:
+        if self._validity.get(general) is not None:
             return
         heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
 
