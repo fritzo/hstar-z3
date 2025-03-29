@@ -29,6 +29,7 @@ from .normal import (
     Term,
     complexity,
     compress_free_vars,
+    iter_permute_free_vars,
     subst,
     subst_complexity,
 )
@@ -233,14 +234,18 @@ class Refiner:
             special = subst(general, env)
             special = compress_free_vars(special)
             # Note special may be more or less complex than the pair complexity,
-            # due to eager linear reduction.
+            # due to eager linear reduction and free variable compression.
             if special in self._specialize:
                 continue
-            self._specialize[special].add(special)
-            self._add_edge(general, special)
-            heapq.heappush(self._candidate_heap, special)
-            if special.free_vars:
-                self._start_refining(special)
+            # Add all permutations, whose universal closures are all equivalent.
+            equiv_class = set(iter_permute_free_vars(special))
+            for x in equiv_class:
+                self._add_edge(general, x)
+                for y in equiv_class:
+                    self._add_edge(x, y)
+                heapq.heappush(self._candidate_heap, x)
+                if x.free_vars:
+                    self._start_refining(x)
 
     def _start_refining(self, general: Term) -> None:
         assert general.free_vars, "cannot refine a closed term"

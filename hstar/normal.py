@@ -835,3 +835,13 @@ def compress_free_vars(term: Term) -> Term:
         return term
     env: Env = Env({k: VAR(i) for i, k in enumerate(sorted(term.free_vars))})
     return subst(term, env)
+
+
+def iter_permute_free_vars(term: Term) -> Iterator[Term]:
+    """
+    Iterates over all permutations of free variables in a term.
+    """
+    free_vars = sorted(term.free_vars)
+    for perm in itertools.permutations(free_vars):
+        env: Env = Env({k: VAR(i) for i, k in enumerate(perm)})
+        yield subst(term, env)
