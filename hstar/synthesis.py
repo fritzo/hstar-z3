@@ -167,6 +167,7 @@ class BatchingSynthesizer(SynthesizerBase):
 
     def step(self) -> tuple[Term, bool]:
         """Performs inference until a new fact is learned."""
+        counter["batch_synthesizer.step"] += 1
         while not self._new_facts:
             for valid in (False, True):
                 while max(map(len, self._pending)) < self.batch_size:
@@ -178,9 +179,11 @@ class BatchingSynthesizer(SynthesizerBase):
         return self._new_facts.popitem()
 
     def _add_candidate(self) -> None:
+        counter["batch_synthesizer.add_candidate"] += 1
         candidate, valid = self.refiner.next_candidate()
         if valid is not None:
             # Candidate merely specializes a previous candidate.
+            counter["batch_synthesizer.specialize"] += 1
             action = "Accepted" if valid else "Rejected"
             logger.debug(f"{action}: {candidate}")
             self._new_facts[candidate] = valid
@@ -200,7 +203,7 @@ class BatchingSynthesizer(SynthesizerBase):
         self._pending[False][key] = claim.negate()
 
     def _step(self, valid: bool) -> None:
-        counter["batch_synthesizer.invalid"] += 1
+        counter["batch_synthesizer.check"] += 1
         pending = self._pending[valid]
         proved, discard = self._check(pending)
         for key in discard:
@@ -220,6 +223,7 @@ class BatchingSynthesizer(SynthesizerBase):
         """
         # Assume the query is convex, i.e. if any subset of the claims is
         # unsatisfiable, then at least one of the claims is unsatisfiable.
+        counter["batch_synthesizer.check"] += 1
         proved: set[str] = set()
         discard: set[str] = set()
 
@@ -231,6 +235,7 @@ class BatchingSynthesizer(SynthesizerBase):
             if self.solver.check(claim.not_constraint) != z3.unsat:
                 discard.add(key)
                 return proved, discard
+            counter["batch_synthesizer.unsat"] += 1
             lemma_forall(self.solver, claim.holes, claim.constraint)
             proved.add(key)
             return proved, discard
@@ -248,6 +253,7 @@ class BatchingSynthesizer(SynthesizerBase):
 
         # If a single claim is unsatisfiable, then it is to blame.
         if len(maybe_unsat) == 1:
+            counter["batch_synthesizer.unsat_core"] += 1
             key = next(iter(maybe_unsat))
             claim = claims[key]
             lemma_forall(self.solver, claim.holes, claim.constraint)
@@ -258,9 +264,9 @@ class BatchingSynthesizer(SynthesizerBase):
         keys = sorted(maybe_unsat)
         x = {k: claims[k] for k in keys[: len(keys) // 2]}
         y = {k: claims[k] for k in keys[len(keys) // 2 :]}
-        unsat_x, discard_x = self._check(x)
-        unsat_y, discard_y = self._check(y)
-        proved.update(unsat_x, unsat_y)
+        proved_x, discard_x = self._check(x)
+        proved_y, discard_y = self._check(y)
+        proved.update(proved_x, proved_y)
         discard.update(discard_x, discard_y)
         return proved, discard
 
