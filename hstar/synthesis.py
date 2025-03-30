@@ -12,11 +12,10 @@ from dataclasses import dataclass
 from weakref import WeakKeyDictionary
 
 import z3
-from z3 import ForAll, Not
+from z3 import Not
 
 from . import language
 from .enumeration import Refiner
-from .grammars import Grammar
 from .metrics import COUNTERS
 from .normal import Term
 from .theory import add_theory
@@ -39,6 +38,7 @@ def lemma_forall(solver: z3.Solver, holes: list[z3.ExprRef], lemma: z3.ExprRef) 
             patterns=[language.as_pattern(lemma)],
             qid=name,
         )
+    logger.debug(f"{name}: {lemma}")
     solver.assert_and_track(lemma, name)
     lemmas.append(lemma)
 
@@ -239,65 +239,3 @@ class BatchingSynthesizer(SynthesizerBase):
         proved.update(proved_x, proved_y)
         discard.update(discard_x, discard_y)
         return proved, discard
-
-
-# FIXME the correct instance may not be the last instance.
-_INSTANCE: list[z3.ExprRef] = []
-
-
-def _on_clause(pr: z3.ExprRef, clause: list, parents: list) -> None:
-    global _INSTANCE
-    if not z3.is_app(pr) or pr.decl().name() != "inst":
-        return
-    quant = pr.arg(0)
-    if quant.qid() != "sygus":
-        return
-    for child in pr.children():
-        if not z3.is_app(child) or child.decl().name() != "bind":
-            continue
-        _INSTANCE = child.children()
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Instance: {_INSTANCE}")
-        break
-
-
-def sygus(
-    grammar: Grammar,
-    constraint: Callable[[z3.ExprRef], z3.ExprRef],
-) -> z3.ExprRef | None:
-    """
-    EXPERIMENTAL Synthesize using SyGuS entirely inside Z3.
-
-    FIXME this does not work yet.
-
-    Args:
-        grammar: The grammar to synthesize terms from.
-        constraint: A function : Term -> BoolSort.
-        solver: The Z3 solver to use.
-    Returns:
-        A term of grammar.sort satisfying the constraint,
-            or None if no term was found.
-    """
-    # This attempts to extract an example instance from Z3's proof of
-    # unsatisfiability. It currently fails for at least two reasons:
-    # 1. The instance is not guaranteed to be the correct one.
-    #    This might be addressed by recording many instances and filtering.
-    # 2. The desired "sygus" quantifier is not instantiated often enough.
-    #    This might be addressed by weighting other quantifiers or
-    #    implementing a custom tactic to instantiate the quantifier.
-    global _INSTANCE
-    hole = z3.FreshConst(grammar.sort, "hole")
-    formula = ForAll([hole], Not(constraint(grammar.eval(hole))), qid="sygus")
-    solver = z3.Solver()
-    add_theory(solver)
-    logger.info("Synthesizing")
-    solver.add(*grammar.eval_theory)
-    z3.OnClause(solver, _on_clause)
-    _INSTANCE = []
-    result = solver.check(formula)
-    if result != z3.unsat:
-        return None
-    if not _INSTANCE:
-        return None
-    logger.info(f"Found instance: {_INSTANCE[0]}")
-    return _INSTANCE[0]
