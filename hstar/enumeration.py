@@ -164,17 +164,21 @@ class Refiner:
     - The refiner pushes facts to the synthesizer via the `on_fact()` callback.
 
     Warning: Candidates are discovered in approximately but not exactly
-    increasing order of complexity. The first reason is that exploration queue
-    is ordered by the complexity of unevaluated substitution pairs
-    `(candidate,env)`, but `subst(candidate,env)` may be more or less complex
-    than the pair complexity, due to eager linear reduction. The second reason
-    is that validity may be learned out of order via `.mark_valid()`.
+    increasing order of complexity. To improve ordering, set lookahead to a
+    large number.
     """
 
-    def __init__(self, sketch: Term, on_fact: Callable[[Term, bool], None]) -> None:
+    def __init__(
+        self,
+        sketch: Term,
+        on_fact: Callable[[Term, bool], None],
+        *,
+        lookahead: int = 128,
+    ) -> None:
         sketch = canonicalize_free_vars(sketch)
         # Persistent state.
         self.on_fact = on_fact
+        self.lookahead = lookahead
         self._sketch = sketch
         self._specialize: dict[Term, set[Term]] = {}  # general -> special
         self._specialize[sketch] = set()
@@ -188,7 +192,9 @@ class Refiner:
         """Return the next candidate term to check."""
         counter["refiner.next_candidate"] += 1
         while True:
-            while not self._candidate_heap:
+            # We only need _candidate_heap to be nonempty, but to improve
+            # ordering we look ahead.
+            while len(self._candidate_heap) < self.lookahead:
                 self._grow()
             term = heapq.heappop(self._candidate_heap)
             if self._validity.get(term) is None:
@@ -235,14 +241,20 @@ class Refiner:
             special = canonicalize_free_vars(special)
             if special is general:
                 continue
+
             # Note special may be more or less complex than the pair complexity,
             # due to eager linear reduction and free variable compression.
-            if special not in self._specialize:
-                self._specialize[special] = set()
-                heapq.heappush(self._candidate_heap, special)
-                if special.free_vars:
-                    self._start_refining(special)
+            if special in self._specialize:
+                self._add_edge(general, special)
+                continue
+
+            # Add a new node to the DAG.
+            self._specialize[special] = set()
             self._add_edge(general, special)
+            if self._validity.get(special) is None:
+                heapq.heappush(self._candidate_heap, special)
+            if special.free_vars:
+                self._start_refining(special)
 
     def _start_refining(self, general: Term) -> None:
         assert general.free_vars, "cannot refine a closed term"
