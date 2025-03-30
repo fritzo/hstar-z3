@@ -845,3 +845,13 @@ def iter_permute_free_vars(term: Term) -> Iterator[Term]:
     for perm in itertools.permutations(free_vars):
         env: Env = Env({k: VAR(i) for i, k in enumerate(perm)})
         yield subst(term, env)
+
+
+def canonicalize_free_vars(term: Term) -> Term:
+    if not term.free_vars:
+        return term
+    term = compress_free_vars(term)
+    return min(
+        iter_permute_free_vars(term),
+        key=lambda t: (complexity(t), repr(t)),
+    )

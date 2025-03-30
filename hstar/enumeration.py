@@ -10,7 +10,6 @@ satisfying constraints.
 import heapq
 import itertools
 import math
-from collections import defaultdict
 from collections.abc import Callable, Iterator
 from functools import cache
 
@@ -27,9 +26,8 @@ from .normal import (
     VAR,
     Env,
     Term,
+    canonicalize_free_vars,
     complexity,
-    compress_free_vars,
-    iter_permute_free_vars,
     subst,
     subst_complexity,
 )
@@ -174,11 +172,12 @@ class Refiner:
     """
 
     def __init__(self, sketch: Term, on_fact: Callable[[Term, bool], None]) -> None:
+        sketch = canonicalize_free_vars(sketch)
         # Persistent state.
         self.on_fact = on_fact
         self._sketch = sketch
-        self._specialize: dict[Term, set[Term]] = defaultdict(set)  # general -> special
-        self._specialize[sketch].add(sketch)
+        self._specialize: dict[Term, set[Term]] = {}  # general -> special
+        self._specialize[sketch] = set()
         self._validity: dict[Term, bool] = {}
         # Ephemeral state, used while growing.
         self._candidate_heap: list[Term] = [sketch]
@@ -225,27 +224,25 @@ class Refiner:
         if not self._growth_heap:
             raise StopIteration("Refiner is exhausted.")
         c, level, general = heapq.heappop(self._growth_heap)
-        if self._validity.get(general) is not None:
-            return
+        # Note we could prune the search space to terms whose validity is
+        # unknown, but that would reduce the number of edges in the DAG and
+        # therefore the Refiner's ability to propagate validity.
         heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
 
         # Specialize the term via every env of complexity c.
         for env in env_enumerator(general.free_vars).level(level):
             special = subst(general, env)
-            special = compress_free_vars(special)
+            special = canonicalize_free_vars(special)
+            if special is general:
+                continue
             # Note special may be more or less complex than the pair complexity,
             # due to eager linear reduction and free variable compression.
-            if special in self._specialize:
-                continue
-            # Add all permutations, whose universal closures are all equivalent.
-            equiv_class = set(iter_permute_free_vars(special))
-            for x in equiv_class:
-                self._add_edge(general, x)
-                for y in equiv_class:
-                    self._add_edge(x, y)
-                heapq.heappush(self._candidate_heap, x)
-                if x.free_vars:
-                    self._start_refining(x)
+            if special not in self._specialize:
+                self._specialize[special] = set()
+                heapq.heappush(self._candidate_heap, special)
+                if special.free_vars:
+                    self._start_refining(special)
+            self._add_edge(general, special)
 
     def _start_refining(self, general: Term) -> None:
         assert general.free_vars, "cannot refine a closed term"
@@ -259,7 +256,7 @@ class Refiner:
         # Propagate validity along the new edge.
         valid = self._validity.get(general)
         if valid is not None:
-            self.mark_valid(general, valid)
+            self.mark_valid(special, valid)
 
     def validate(self) -> None:
         """Validate the refinement DAG, for testing."""
