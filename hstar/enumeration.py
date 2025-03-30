@@ -155,7 +155,7 @@ def env_enumerator(free_vars: Map[int, int]) -> EnvEnumerator:
 
 class Refiner:
     """
-    Data structure representing the DAG of refinements of a term sketch,
+    Data structure representing the graph of refinements of a term sketch,
     propagating validity along general-special edges.
 
     The dataflow is as follows:
@@ -224,14 +224,14 @@ class Refiner:
                 )
 
     def _grow(self) -> None:
-        """Grow the refinement DAG."""
+        """Grow the refinement graph."""
         counter["refiner.grow"] += 1
         # Find a term to refine.
         if not self._growth_heap:
             raise StopIteration("Refiner is exhausted.")
         c, level, general = heapq.heappop(self._growth_heap)
         # Note we could prune the search space to terms whose validity is
-        # unknown, but that would reduce the number of edges in the DAG and
+        # unknown, but that would reduce the number of edges in the graph and
         # therefore the Refiner's ability to propagate validity.
         heapq.heappush(self._growth_heap, (c + 1, level + 1, general))
 
@@ -248,7 +248,7 @@ class Refiner:
                 self._add_edge(general, special)
                 continue
 
-            # Add a new node to the DAG.
+            # Add a new node to the graph.
             self._specialize[special] = set()
             self._add_edge(general, special)
             if self._validity.get(special) is None:
@@ -271,7 +271,7 @@ class Refiner:
             self.mark_valid(special, valid)
 
     def validate(self) -> None:
-        """Validate the refinement DAG, for testing."""
+        """Validate the refinement graph, for testing."""
         for general, specials in self._specialize.items():
             for special in specials:
                 valid = self._validity.get(general)
