@@ -51,6 +51,18 @@ EXAMPLES: list[tuple[normal.Term, z3.ExprRef]] = [
         normal.JOIN(normal.VAR(0), normal.VAR(1), normal.VAR(2)),
         language.JOIN(language.VAR(0), language.JOIN(language.VAR(1), language.VAR(2))),
     ),
+    # A pair
+    # <BOT, λx. y>
+    (
+        normal.ABS(
+            normal.APP(normal.APP(normal.VAR(0), normal.BOT), normal.ABS(normal.VAR(2)))
+        ),
+        language.app(
+            language.C,
+            language.app(language.C, language.I, language.BOT),
+            language.app(language.K, language.VAR(0)),
+        ),
+    ),
 ]
 IDS = [repr(term) for term, _ in EXAMPLES]
 

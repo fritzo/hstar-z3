@@ -108,13 +108,12 @@ class Synthesizer(SynthesizerBase):
         return bool(self.solver.check(formula) == z3.unsat)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Claim:
     term: Term
     holes: list[z3.ExprRef]
     constraint: z3.ExprRef
     not_constraint: z3.ExprRef
-    valid: bool | None = None
 
     def negate(self) -> "Claim":
         return Claim(
@@ -122,7 +121,6 @@ class Claim:
             holes=self.holes,
             constraint=self.not_constraint,
             not_constraint=self.constraint,
-            valid=None,
         )
 
 
@@ -185,7 +183,6 @@ class BatchingSynthesizer(SynthesizerBase):
         for key in proved:
             claim = pending.pop(key)
             self._pending[not valid].pop(key, None)
-            claim.valid = valid
             action = "Accepted" if valid else "Rejected"
             logger.debug(f"{action}: {claim.term}")
             self.refiner.mark_valid(claim.term, valid)  # TODO move into _check
@@ -218,10 +215,10 @@ class BatchingSynthesizer(SynthesizerBase):
             for key, claim in claims.items():
                 self.solver.assert_and_track(claim.not_constraint, key)
             if self.solver.check() != z3.unsat:
-                discard.update(claims.keys())
+                discard.update(claims)
                 return proved, discard
             unsat_core = self.solver.unsat_core()
-        maybe_unsat = set(map(str, unsat_core)) & set(claims.keys())
+        maybe_unsat = set(map(str, unsat_core)) & set(claims)
         assert maybe_unsat
 
         # If a single claim is unsatisfiable, then it is to blame.
