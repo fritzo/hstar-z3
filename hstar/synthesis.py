@@ -46,7 +46,7 @@ def lemma_forall(solver: z3.Solver, holes: list[z3.ExprRef], lemma: z3.ExprRef) 
 class SynthesizerBase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def step(self) -> None:
-        """Generate the next candidate and check it."""
+        """Performs a unit of inference work."""
 
 
 class Synthesizer(SynthesizerBase):
@@ -57,6 +57,8 @@ class Synthesizer(SynthesizerBase):
         sketch: The term sketch to refine.
         constraint: A function that takes a candidate term and returns a Z3
             expression representing a constraint on the candidate.
+        on_fact: A callback that is called when a fact is proven.
+        timeout_ms: The timeout for the solver in milliseconds.
     """
 
     def __init__(
@@ -125,6 +127,18 @@ class Claim:
 
 
 class BatchingSynthesizer(SynthesizerBase):
+    """
+    A synthesis algorithm that searches through refinements of a sketch.
+
+    Args:
+        sketch: The term sketch to refine.
+        constraint: A function that takes a candidate term and returns a Z3
+            expression representing a constraint on the candidate.
+        on_fact: A callback that is called when a fact is proven.
+        batch_size: The number of claims to simultaneously check.
+        timeout_ms: The timeout for the solver in milliseconds.
+    """
+
     def __init__(
         self,
         sketch: Term,
