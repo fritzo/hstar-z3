@@ -26,6 +26,8 @@ def main(args: argparse.Namespace) -> None:
     I = ABS(VAR(0))
 
     def compose(f: Term, g: Term) -> Term:
+        f = shift(f)
+        g = shift(g)
         return ABS(APP(f, APP(g, VAR(0))))
 
     def pair(*args: Term) -> Term:
