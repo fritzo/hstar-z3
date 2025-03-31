@@ -82,6 +82,10 @@ def main(args: argparse.Namespace) -> None:
     for _ in range(args.steps):
         synthesizer.step()
 
+    solutions = sorted(synthesizer.refiner.most_general_solutions())
+    solutions_str = "\n".join(f"<{fst(pair)}, {snd(pair)}>" for pair in solutions)
+    logger.info(f"Found {len(solutions)} general solutions:\n{solutions_str}")
+
 
 parser = argparse.ArgumentParser(
     description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter

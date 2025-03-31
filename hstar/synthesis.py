@@ -44,6 +44,11 @@ def lemma_forall(solver: z3.Solver, holes: list[z3.ExprRef], lemma: z3.ExprRef) 
 
 
 class SynthesizerBase(metaclass=abc.ABCMeta):
+    sketch: Term
+    constraint: Callable[[Term], z3.ExprRef]
+    refiner: Refiner
+    solver: z3.Solver
+
     @abc.abstractmethod
     def step(self) -> None:
         """Performs a unit of inference work."""

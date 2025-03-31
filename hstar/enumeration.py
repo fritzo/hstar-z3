@@ -270,6 +270,20 @@ class Refiner:
         if valid is not None:
             self.mark_valid(special, valid)
 
+    def most_general_solutions(self) -> set[Term]:
+        """Return a set of the most general solutions found so far."""
+        # Compute transitive closure of the specialization graph, which may have
+        # cycles. This could be made more efficient via union-find.
+        generalize = {term: {term} for term, valid in self._validity.items() if valid}
+        pending = set(generalize)
+        while pending:
+            general = pending.pop()
+            for special in self._specialize[general]:
+                if general not in generalize[special]:
+                    generalize[special].add(general)
+                    pending.add(special)
+        return {min(terms) for terms in generalize.values()}
+
     def validate(self) -> None:
         """Validate the refinement graph, for testing."""
         for general, specials in self._specialize.items():
