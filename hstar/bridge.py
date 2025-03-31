@@ -228,3 +228,16 @@ def ast_to_nf(term: ast.Term) -> normal.Term:
         )
 
     raise ValueError(f"Unexpected term type: {term.type}")
+
+
+def ast_to_z3(term: ast.Term) -> z3.ExprRef:
+    """
+    Convert an ast.Term to a Z3 term.
+
+    Args:
+        term: An ast.Term instance
+
+    Returns:
+        A Z3 term expression
+    """
+    return nf_to_z3(ast_to_nf(term))
