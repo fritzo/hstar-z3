@@ -32,9 +32,8 @@ def nf_to_z3(term: normal.Term) -> z3.ExprRef:
         part = next(iter(term.parts))
         return _nf_to_z3(part)
 
-    # For example with term11, we need to carefully construct the JOIN
-    # in a right-associative way as expected by the tests
-    # Sort parts for deterministic ordering
+    # Sort parts for deterministic ordering.
+    # TODO sort by number of free variables, for efficient abstraction.
     sorted_parts = sorted(term.parts)
 
     # Build the JOIN tree in right-associative order (last two elements first)

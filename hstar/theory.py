@@ -444,6 +444,64 @@ def extensional_theory() -> Iterator[ExprRef]:
     )
 
 
+def simple_definition() -> (
+    tuple[normal.Term, list[list[normal.Term]], list[list[normal.Term]]]
+):
+    """
+    Returns:
+    - a conjectured definition of the simple type constructor A.
+    - a stratified list of terms below A
+    - a stratified list of terms equal to A
+    """
+    from hstar.ast import APP, BOT, TOP, to_ast
+    from hstar.bridge import ast_to_nf
+
+    # Basic combinators
+    I = to_ast(lambda x: x)
+    B = to_ast(lambda f, g, x: f(g(x)))
+    CB = to_ast(lambda f, g, x: g(f(x)))
+    C = to_ast(lambda f, x, y: f(y, x))
+    Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
+
+    # Tuple constructor - Barendregt encoding
+    pair = to_ast(lambda r, s, f: f(r, s))
+
+    # Helper functions
+    div = Y(lambda div, x: x | div(x, TOP))
+    copy = to_ast(lambda f, x: f(x, x))  # Also known as W
+    join = to_ast(lambda f, x, y: f(x | y))
+
+    # Combination operators
+    postconj = to_ast(lambda f: f(lambda r, s: pair(B(r), B(s))))
+    preconj = to_ast(lambda f: f(lambda r, s: pair(CB(s), CB(r))))
+    compose = to_ast(
+        lambda f, f_: f(lambda r, s: f_(lambda r_, s_: pair(r * r_, s_ * s)))
+    )
+
+    # A_def definition
+    A_def = Y(
+        lambda a: pair(I, I)  # identity
+        | pair(BOT, TOP)  # safety
+        | pair(div, BOT)  # strictness
+        | pair(join, copy)  # pairing
+        | pair(C, C)  # evaluation order
+        | preconj(a)  # argument types
+        | postconj(a)  # result types
+        | compose(a, a)  # function types
+    )
+
+    # Parts, stratified by the number of times the type constructor A is applied.
+    ast_leqs = [
+        [pair(I, I), pair(BOT, TOP), pair(div, BOT), pair(join, copy), pair(C, C)],
+        [preconj, postconj],
+    ]
+    ast_eqs = [[], [], [compose, C(compose)]]
+    term_leqs = [[ast_to_nf(term) for term in level] for level in ast_leqs]
+    term_eqs = [[ast_to_nf(term) for term in level] for level in ast_eqs]
+
+    return ast_to_nf(A_def), term_leqs, term_eqs
+
+
 def simple_theory() -> Iterator[ExprRef]:
     """
     Theory of a simple type constructor A, defined as join of section-retract pairs.
@@ -456,6 +514,21 @@ def simple_theory() -> Iterator[ExprRef]:
         patterns=[MultiPattern(COMP(r, s), TUPLE(r, s))],
         qid="simple_rs",
     )
+
+    # Add axioms for each part of the recursive definition.
+    _, leqs, eqs = simple_definition()
+    for i, level in enumerate(leqs):
+        for term in level:
+            expr = nf_to_z3(term)
+            for _ in range(i):
+                expr = APP(expr, A)
+            yield LEQ(expr, A)
+    for i, level in enumerate(eqs):
+        for term in level:
+            expr = nf_to_z3(term)
+            for _ in range(i):
+                expr = APP(expr, A)
+            yield expr == A
 
 
 def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:

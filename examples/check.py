@@ -8,36 +8,18 @@ import logging
 
 import z3
 
-from hstar.ast import APP, BOT, TOP, to_ast
-from hstar.bridge import ast_to_nf, ast_to_z3
+from hstar.bridge import nf_to_z3
 from hstar.language import A
 from hstar.logging import setup_color_logging
-from hstar.theory import add_beta_ball, add_theory
+from hstar.theory import add_beta_ball, add_theory, simple_definition
 
 logger = logging.getLogger(__name__)
 
 
 def add_simple_def(solver: z3.Solver) -> None:
-    # Construct the conjectured definition.
-    I = to_ast(lambda x: x)
-    Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
-    DIV = Y(lambda div, x: x | div(x, TOP))
-    raise_ = to_ast(lambda x, _: x)
-    lower = to_ast(lambda x: x(TOP))
-    pull = to_ast(lambda x, y: x | DIV(y))
-    push = to_ast(lambda x: x(BOT))
-    A_def = Y(
-        lambda s, f: (
-            f(I, I)
-            | f(raise_, lower)
-            | f(pull, push)
-            | s(lambda a, a_: s(lambda b, b_: f(a_ >> b, b_ >> a)))
-        )
-    )
-
-    # Add the conjectured definition as an axiom.
-    add_beta_ball(solver, ast_to_nf(A_def), radius=3)
-    solver.assert_and_track(A == ast_to_z3(A_def), "simple_def")
+    A_def, _, _ = simple_definition()
+    add_beta_ball(solver, A_def, radius=3)
+    solver.assert_and_track(A == nf_to_z3(A_def), "simple_def")
 
 
 def main(args: argparse.Namespace) -> None:
