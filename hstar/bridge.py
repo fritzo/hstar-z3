@@ -116,7 +116,7 @@ def _z3_to_nf_const() -> dict[z3.ExprRef, normal.Term]:
     let[language.Y] = Y = ABS(app(lam_x_y_xx, lam_x_y_xx))
     let[language.V] = V = ABS(app(Y, ABS(ABS(JOIN(v0, app(v2, app(v1, v0)))))))
     let[language.DIV] = app(V, app(CI, TOP))
-    # TODO define SIMPLE
+    # TODO define A
 
     return let
 

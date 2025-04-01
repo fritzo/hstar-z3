@@ -17,10 +17,10 @@ from hstar.language import (
     KI,
     LEQ,
     OFTYPE,
-    SIMPLE,
     TOP,
     TUPLE,
     VAR,
+    A,
     B,
     C,
     I,
@@ -209,12 +209,12 @@ def test_tuple_ordering(solver: z3.Solver, formula: z3.ExprRef) -> None:
     check_that(solver, formula)
 
 
-# Add tests for SIMPLE properties
+# Add tests for properties of A
 SIMPLE_EXAMPLES = {
-    "SIMPLE [= TOP": LEQ(SIMPLE, TOP),
-    "BOT [= SIMPLE": LEQ(BOT, SIMPLE),
-    "<I,I> [= SIMPLE": LEQ(TUPLE(I, I), SIMPLE),
-    r"<\f.\x.f, \f.f TOP> [= SIMPLE": LEQ(TUPLE(K, APP(CI, TOP)), SIMPLE),
+    "A [= TOP": LEQ(A, TOP),
+    "BOT [= A": LEQ(BOT, A),
+    "<I,I> [= A": LEQ(TUPLE(I, I), A),
+    r"<\f.\x.f, \f.f TOP> [= A": LEQ(TUPLE(K, APP(CI, TOP)), A),
 }
 
 
@@ -222,7 +222,7 @@ SIMPLE_EXAMPLES = {
     "formula", SIMPLE_EXAMPLES.values(), ids=SIMPLE_EXAMPLES.keys()
 )
 def test_simple(solver: z3.Solver, formula: z3.ExprRef) -> None:
-    """Test SIMPLE type properties."""
+    """Test simple type properties."""
     check_that(solver, formula)
 
 

@@ -29,7 +29,7 @@ COMP = z3.Function("COMP", Term, Term, Term)
 JOIN = z3.Function("JOIN", Term, Term, Term)
 TOP, BOT = z3.Consts("TOP BOT", Term)
 I, K, KI, J, B, C, CI, CB = z3.Consts("I K KI J B C CI CB", Term)
-W, S, Y, V, DIV, SIMPLE = z3.Consts("W S Y V DIV SIMPLE", Term)
+W, S, Y, V, DIV, A = z3.Consts("W S Y V DIV A", Term)
 
 # Scott ordering x [= y.
 if LEQ_IS_Z3_PARTIAL_ORDER := False:  # https://github.com/Z3Prover/z3/issues/7592
@@ -230,7 +230,7 @@ def CONJ(a: ExprRef, b: ExprRef) -> ExprRef:
 
 def simple(a: ExprRef, a1: ExprRef, body: ExprRef) -> ExprRef:
     """Constructor for simple types."""
-    return APP(SIMPLE, lam(a, lam(a1, body)))
+    return APP(A, lam(a, lam(a1, body)))
 
 
 # Types.

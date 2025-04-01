@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-SIMPLE type constructor synthesis example.
+Simple type constructor synthesis example.
 
-This script attempts to synthesize a finitary definition for the SIMPLE type
-constructor defined as: SIMPLE = ⨆ { <r,s> | r ◦ s ⊑ I }
+This script attempts to synthesize a finitary definition for the simple type
+constructor defined as: A = ⨆ { <r,s> | r ◦ s ⊑ I }.
 """
 
 import argparse
@@ -14,7 +14,7 @@ import z3
 from hstar import normal
 from hstar.ast import APP, BOT, TOP, VAR, to_ast
 from hstar.bridge import ast_to_nf, nf_to_z3
-from hstar.language import SIMPLE
+from hstar.language import A
 from hstar.logging import setup_color_logging
 from hstar.synthesis import Synthesizer
 
@@ -31,7 +31,7 @@ def main(args: argparse.Namespace) -> None:
     pull = to_ast(lambda x, y: x | DIV(y))
     push = to_ast(lambda x: x(BOT))
 
-    # Create a sketch for SIMPLE
+    # Create a sketch for A
     sketch = Y(
         lambda s, f: (
             VAR(0)(f)
@@ -42,13 +42,13 @@ def main(args: argparse.Namespace) -> None:
         )
     )
 
-    # Define a constraint that captures the SIMPLE type definition
+    # Define a constraint that captures the simple type definition
     def constraint(candidate: normal.Term) -> z3.ExprRef:
-        return SIMPLE == nf_to_z3(candidate)
+        return A == nf_to_z3(candidate)
 
     def on_fact(term: normal.Term, valid: bool) -> None:
         if valid:
-            logger.info(f"Found potential SIMPLE type: {term}")
+            logger.info(f"Found a simple type: {term}")
 
     synthesizer = Synthesizer(
         ast_to_nf(sketch),
@@ -57,7 +57,7 @@ def main(args: argparse.Namespace) -> None:
         timeout_ms=args.timeout_ms,
     )
 
-    logger.info(f"Synthesizing SIMPLE type with timeout_ms={args.timeout_ms}")
+    logger.info(f"Synthesizing simple type with timeout_ms={args.timeout_ms}")
     for _ in range(args.steps):
         synthesizer.step()
 

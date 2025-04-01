@@ -12,11 +12,11 @@ beta-eta equivalence.
 In addition to untyped λ-join-calculus, we adopt Scott's framework of
 types-as-closures, where a closure `a` is an idempotent increasing function
 `I [= a = a o a`. Closures afford a rich type system including a universal type
-`V` and a term `SIMPLE` that constructs simple types from codes.
+`V` and a term `A` that constructs simple types from codes.
 
-All terms in this theory are definable from the generators APP, S, K, J, and
-SIMPLE. Furthermore, it is conjectured that SIMPLE is definable from the
-generators APP, S, K, and J.
+All terms in this theory are definable from the generators APP, S, K, J, and A.
+Furthermore, it is conjectured that A is definable from the generators APP, S,
+K, and J.
 """
 
 import functools
@@ -44,10 +44,10 @@ from .language import (
     LEQ,
     LEQ_IS_Z3_PARTIAL_ORDER,
     OFTYPE,
-    SIMPLE,
     TOP,
     TUPLE,
     VAR,
+    A,
     B,
     C,
     I,
@@ -171,7 +171,7 @@ def combinator_theory() -> Iterator[ExprRef]:
     yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(x, y)))))
     yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
-    # TODO define SIMPLE
+    # TODO define A
 
 
 def closure_theory() -> Iterator[ExprRef]:
@@ -446,13 +446,13 @@ def extensional_theory() -> Iterator[ExprRef]:
 
 def simple_theory() -> Iterator[ExprRef]:
     """
-    Theory of a SIMPLE type constructor, defined as join of section-retract pairs.
+    Theory of a simple type constructor A, defined as join of section-retract pairs.
     """
-    yield LEQ(SIMPLE, TUPLE(TOP, TOP))
-    yield APP(SIMPLE, CB) == I
+    yield LEQ(A, TUPLE(TOP, TOP))
+    yield APP(A, CB) == I
     yield ForAll(
         [r, s],
-        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(r, s), SIMPLE)),
+        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(r, s), A)),
         patterns=[MultiPattern(COMP(r, s), TUPLE(r, s))],
         qid="simple_rs",
     )
