@@ -439,40 +439,18 @@ def extensional_theory() -> Iterator[ExprRef]:
     )
 
 
-def simple_theory(*, include_all: bool = False) -> Iterator[ExprRef]:
+def simple_theory() -> Iterator[ExprRef]:
     """
     Theory of a SIMPLE type constructor, defined as join of section-retract pairs.
     """
-
-    def above_all_sr(candidate: ExprRef) -> ExprRef:
-        s1, r1 = z3.Consts("s1 r1", Term)  # Different names for bound variables
-        return ForAll(
-            [s1, r1],
-            Implies(LEQ(COMP(r1, s1), I), LEQ(TUPLE(s1, r1), candidate)),
-            qid="sr_above",
-        )
-
-    # SIMPLE is above all section-retract pairs.
-    yield above_all_sr(SIMPLE)
-
-    # SIMPLE is the least such term.
-    yield ForAll([x], Implies(above_all_sr(x), LEQ(SIMPLE, x)), qid="simple_least")
-
-    # Inhabitation. These nested quantifiers are hopeless.
-    if include_all:
-        yield ForAll(
-            [t, x],
-            Implies(
-                ForAll(
-                    [s, r],
-                    Implies(LEQ(COMP(r, s), I), LEQ(app(t, s, r, x), x)),
-                    qid="t_s_r_x",
-                ),
-                LEQ(app(SIMPLE, t, x), x),
-            ),
-            patterns=[LEQ(app(SIMPLE, t, x), x)],
-            qid="simple_inhab",
-        )
+    yield LEQ(SIMPLE, TUPLE(TOP, TOP))
+    yield APP(SIMPLE, CB) == I
+    yield ForAll(
+        [s, r],
+        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(s, r), SIMPLE)),
+        patterns=[MultiPattern(COMP(r, s), TUPLE(s, r))],
+        qid="simple_sr",
+    )
 
 
 def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:
