@@ -3,7 +3,7 @@
 Section-retraction synthesis example.
 
 This script continuously runs the synthesis algorithm to generate <r,s> pairs with
-s o r [= I, until interrupted by the user.
+r o s [= I, until interrupted by the user.
 """
 
 import argparse
@@ -45,12 +45,12 @@ def main(args: argparse.Namespace) -> None:
     # Sketch: (\x. x r s) == <r,s>
     sketch = pair(VAR(0), VAR(1))
 
-    # Constraints: s o r [= I, and optionally both s and r converge.
+    # Constraints: r o s [= I, and optionally both r and s converge.
     def constraint(candidate: Term) -> z3.ExprRef:
         r = fst(candidate)
         s = snd(candidate)
-        s_o_r = compose(s, r)
-        result = LEQ(nf_to_z3(s_o_r), nf_to_z3(I))
+        r_o_s = compose(r, s)
+        result = LEQ(nf_to_z3(r_o_s), nf_to_z3(I))
         if args.nontrivial:
             result = z3.And(result, CONV(nf_to_z3(r)), CONV(nf_to_z3(s)))
         return result

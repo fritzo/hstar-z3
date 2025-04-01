@@ -28,7 +28,7 @@ Our synthesis approach is:
 Our first challenge problem is to synthesize a finitary definition for the
 simple type constructor
 ```
-SIMPLE = ⨆ { <r,s> | s ◦ r ⊑ I }
+SIMPLE = ⨆ { <r,s> | r ◦ s ⊑ I }
 ```
 where `⊑` is the Scott ordering, `⨆` is the infinitary join operator, `I` is the
 identity function, `◦` is function composition, `<r,s> = (λx. x r s)` is a pair,

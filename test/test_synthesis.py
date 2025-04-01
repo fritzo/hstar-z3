@@ -17,9 +17,9 @@ def test_synthesizer() -> None:
     # Sketch: (\x. x r s) == <r,s>
     sketch = ABS(app(VAR(0), VAR(1), VAR(2)))
 
-    # Constraint: s o r [= I
+    # Constraint: r o s [= I
     def constraint(candidate: Term) -> z3.ExprRef:
-        lhs = APP(candidate, ABS(ABS(ABS(APP(VAR(1), APP(VAR(2), VAR(0)))))))
+        lhs = APP(candidate, ABS(ABS(ABS(APP(VAR(2), APP(VAR(1), VAR(0)))))))
         rhs = ABS(VAR(0))
         return LEQ(nf_to_z3(lhs), nf_to_z3(rhs))
 

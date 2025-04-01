@@ -9,15 +9,16 @@ import logging
 import z3
 
 from hstar.ast import APP, BOT, TOP, to_ast
-from hstar.bridge import ast_to_z3
+from hstar.bridge import ast_to_nf, ast_to_z3
 from hstar.language import SIMPLE
 from hstar.logging import setup_color_logging
-from hstar.theory import add_theory
+from hstar.theory import add_beta_ball, add_theory
 
 logger = logging.getLogger(__name__)
 
 
 def add_simple_def(solver: z3.Solver) -> None:
+    # Define the conjectured SIMPLE definition.
     I = to_ast(lambda x: x)
     Y = to_ast(lambda f: APP(lambda x: f(x(x)), lambda x: f(x(x))))
     DIV = Y(lambda div, x: x | div(x, TOP))
@@ -33,6 +34,9 @@ def add_simple_def(solver: z3.Solver) -> None:
             | s(lambda a, a_: s(lambda b, b_: f(a_ >> b, b_ >> a)))
         )
     )
+
+    # Add the conjectured SIMPLE definition as an axiom.
+    add_beta_ball(solver, ast_to_nf(A), radius=3)
     solver.assert_and_track(SIMPLE == ast_to_z3(A), "simple_def")
 
 

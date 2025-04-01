@@ -18,11 +18,13 @@ from . import language
 from .enumeration import Refiner
 from .metrics import COUNTERS
 from .normal import Term
-from .theory import add_theory
+from .theory import add_beta_ball, add_theory
 
 logger = logging.getLogger(__name__)
 counter = COUNTERS[__name__]
 
+DEFAULT_RADIUS: int = 3
+DEFAULT_TIMEOUT_MS: int = 1000
 LEMMAS: WeakKeyDictionary[z3.Solver, list[z3.ExprRef]] = WeakKeyDictionary()
 
 
@@ -64,6 +66,7 @@ class Synthesizer(SynthesizerBase):
             expression representing a constraint on the candidate.
         on_fact: A callback that is called when a fact is proven.
         timeout_ms: The timeout for the solver in milliseconds.
+        radius: The radius of the beta ball around the candidate.
     """
 
     def __init__(
@@ -72,7 +75,8 @@ class Synthesizer(SynthesizerBase):
         constraint: Callable[[Term], z3.ExprRef],
         on_fact: Callable[[Term, bool], None],
         *,
-        timeout_ms: int = 1000,
+        timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        radius: int = DEFAULT_RADIUS,
     ) -> None:
         self.sketch = sketch
         self.constraint = constraint
@@ -80,6 +84,7 @@ class Synthesizer(SynthesizerBase):
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.timeout_ms = timeout_ms  # for hstar use only
+        self.radius = radius
         add_theory(self.solver)
 
     def step(self) -> None:
@@ -93,7 +98,7 @@ class Synthesizer(SynthesizerBase):
 
         # Check if the constraint is unsatisfiable,
         # which means the candidate is universally invalid.
-        if self._is_unsat(constraint):
+        if self._is_unsat(candidate, constraint):
             counter["pos.unsat"] += 1
             logger.debug(f"Rejected: {candidate}")
             self.refiner.mark_valid(candidate, False)
@@ -102,17 +107,19 @@ class Synthesizer(SynthesizerBase):
 
         # Check if the negation of the constraint is unsatisfiable,
         # which means the original constraint is universally valid.
-        if self._is_unsat(not_constraint):
+        if self._is_unsat(candidate, not_constraint):
             counter["neg.unsat"] += 1
             logger.debug(f"Accepted: {candidate}")
             self.refiner.mark_valid(candidate, True)
             # By DeMorgan's law: ¬∃x.¬φ(x) ≡ ∀x.φ(x)
             lemma_forall(self.solver, holes, constraint)
 
-    def _is_unsat(self, formula: z3.ExprRef) -> bool:
-        # We expect sat to never occur, as our base theory has no finite model,
-        # hence we distinguish only between unsat and unknown/sat.
-        return bool(self.solver.check(formula) == z3.unsat)
+    def _is_unsat(self, candidate: Term, formula: z3.ExprRef) -> bool:
+        with self.solver:
+            add_beta_ball(self.solver, candidate, self.radius)
+            # We expect sat to never occur, as our base theory has no finite model,
+            # hence we distinguish only between unsat and unknown/sat.
+            return bool(self.solver.check(formula) == z3.unsat)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +149,7 @@ class BatchingSynthesizer(SynthesizerBase):
         on_fact: A callback that is called when a fact is proven.
         batch_size: The number of claims to simultaneously check.
         timeout_ms: The timeout for the solver in milliseconds.
+        radius: The radius of the beta ball around the candidate.
     """
 
     def __init__(
@@ -151,7 +159,8 @@ class BatchingSynthesizer(SynthesizerBase):
         on_fact: Callable[[Term, bool], None],
         *,
         batch_size: int = 1,
-        timeout_ms: int = 1000,
+        timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        radius: int = DEFAULT_RADIUS,
     ) -> None:
         self.sketch = sketch
         self.constraint = constraint
@@ -161,6 +170,7 @@ class BatchingSynthesizer(SynthesizerBase):
         self.solver.set(timeout=timeout_ms)
         self.solver.set("unsat_core", True)
         self.solver.timeout_ms = timeout_ms
+        self.radius = radius
         add_theory(self.solver)
 
         # Candidates remain pending until either they are decided or hit a timeout.
@@ -221,9 +231,11 @@ class BatchingSynthesizer(SynthesizerBase):
             key = next(iter(claims))
             claim = claims[key]
             # Check whether the claim is valid.
-            if self.solver.check(claim.not_constraint) != z3.unsat:
-                discard.add(key)
-                return proved, discard
+            with self.solver:
+                add_beta_ball(self.solver, claim.term, self.radius)
+                if self.solver.check(claim.not_constraint) != z3.unsat:
+                    discard.add(key)
+                    return proved, discard
             counter["batch_synthesizer.unsat"] += 1
             lemma_forall(self.solver, claim.holes, claim.constraint)
             proved.add(key)
@@ -232,6 +244,7 @@ class BatchingSynthesizer(SynthesizerBase):
         # Check whether any claim is valid, and examine the unsat core.
         with self.solver:
             for key, claim in claims.items():
+                add_beta_ball(self.solver, claim.term, self.radius)
                 self.solver.assert_and_track(claim.not_constraint, key)
             if self.solver.check() != z3.unsat:
                 discard.update(claims)

@@ -3,7 +3,7 @@
 SIMPLE type constructor synthesis example.
 
 This script attempts to synthesize a finitary definition for the SIMPLE type
-constructor defined as: SIMPLE = ⨆ { <r,s> | s ◦ r ⊑ I }
+constructor defined as: SIMPLE = ⨆ { <r,s> | r ◦ s ⊑ I }
 """
 
 import argparse
@@ -36,9 +36,9 @@ def main(args: argparse.Namespace) -> None:
         lambda s, f: (
             VAR(0)(f)
             | f(I, I)
-            | f(raise_, lower)
-            | f(pull, push)
-            | s(lambda a, a_: s(lambda b, b_: f(a_ >> b, b_ >> a)))
+            | f(lower, raise_)
+            | f(push, pull)
+            | s(lambda a, a_: s(lambda b, b_: f(b >> a_, a >> b_)))
         )
     )
 

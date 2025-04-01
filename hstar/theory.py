@@ -20,11 +20,16 @@ generators APP, S, K, and J.
 """
 
 import functools
+import itertools
 import logging
+import math
 from collections.abc import Callable, Iterable, Iterator
 
 import z3
 from z3 import And, ExprRef, ForAll, Implies, MultiPattern, Not, Or
+
+from hstar import normal
+from hstar.bridge import nf_to_z3
 
 from .language import (
     APP,
@@ -446,10 +451,10 @@ def simple_theory() -> Iterator[ExprRef]:
     yield LEQ(SIMPLE, TUPLE(TOP, TOP))
     yield APP(SIMPLE, CB) == I
     yield ForAll(
-        [s, r],
-        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(s, r), SIMPLE)),
-        patterns=[MultiPattern(COMP(r, s), TUPLE(s, r))],
-        qid="simple_sr",
+        [r, s],
+        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(r, s), SIMPLE)),
+        patterns=[MultiPattern(COMP(r, s), TUPLE(r, s))],
+        qid="simple_rs",
     )
 
 
@@ -547,3 +552,12 @@ def add_theory(
         else:
             solver.add(axiom)
     logger.info(f"Solver statistics:\n{solver.statistics()}")
+
+
+def add_beta_ball(solver: z3.Solver, term: normal.Term, radius: int) -> None:
+    """Add the beta ball around a term to the solver."""
+    equiv_class = set(map(nf_to_z3, normal.beta_ball(term, radius)))
+    log2 = round(math.log2(len(equiv_class)))
+    counter[f"beta_ball.log2.{log2}"] += 1
+    for x, y in itertools.combinations(equiv_class, 2):
+        solver.add(x == y)
