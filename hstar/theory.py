@@ -507,10 +507,10 @@ def simple_theory() -> Iterator[ExprRef]:
     Theory of a simple type constructor A, defined as join of section-retract pairs.
     """
     yield LEQ(A, TUPLE(TOP, TOP))
-    yield APP(A, CB) == I
+    yield APP(A, B) == I
     yield ForAll(
         [r, s],
-        Implies(LEQ(COMP(r, s), I), LEQ(TUPLE(r, s), A)),
+        LEQ(COMP(r, s), I) == LEQ(TUPLE(r, s), A),
         patterns=[MultiPattern(COMP(r, s), TUPLE(r, s))],
         qid="simple_rs",
     )
