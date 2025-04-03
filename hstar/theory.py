@@ -164,14 +164,15 @@ def combinator_theory() -> Iterator[ExprRef]:
     # Fixed points
     lam_y_yy = lam(y, app(y, y))
     lam_y_x_yy = lam(y, app(x, app(y, y)))
+    lam_xy_y_xxy = lam(x, lam(y, app(y, app(x, x, y))))
     yield Y == lam(x, app(lam_y_yy, lam_y_x_yy))
     yield Y == lam(x, app(lam_y_x_yy, lam_y_x_yy))
+    yield Y == app(lam_xy_y_xxy, lam_xy_y_xxy)  # Barendregt's Theta
     yield Y == app(S, I, Y)
     yield APP(Y, J) == TOP
     yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(x, y)))))
     yield V == lam(x, app(Y, lam(y, JOIN(I, COMP(y, x)))))
     yield DIV == app(V, lam(x, app(x, TOP)))
-    # TODO define A
 
 
 def closure_theory() -> Iterator[ExprRef]:
@@ -502,7 +503,7 @@ def simple_definition() -> (
     return ast_to_nf(A_def), term_leqs, term_eqs
 
 
-def simple_theory() -> Iterator[ExprRef]:
+def simple_theory(definition: bool = False) -> Iterator[ExprRef]:
     """
     Theory of a simple type constructor A, defined as join of section-retract pairs.
     """
@@ -516,7 +517,7 @@ def simple_theory() -> Iterator[ExprRef]:
     )
 
     # Add axioms for each part of the recursive definition.
-    _, leqs, eqs = simple_definition()
+    A_def, leqs, eqs = simple_definition()
     for i, level in enumerate(leqs):
         for term in level:
             expr = nf_to_z3(term)
@@ -529,6 +530,9 @@ def simple_theory() -> Iterator[ExprRef]:
             for _ in range(i):
                 expr = APP(expr, A)
             yield expr == A
+
+    if definition:
+        yield A == A_def
 
 
 def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:
