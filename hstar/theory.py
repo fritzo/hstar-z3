@@ -32,6 +32,7 @@ from hstar import normal
 from hstar.bridge import nf_to_z3
 
 from .language import (
+    ANY,
     APP,
     BOT,
     CB,
@@ -39,11 +40,11 @@ from .language import (
     COMP,
     CONV,
     DIV,
+    INHABITS,
     JOIN,
     KI,
     LEQ,
     LEQ_IS_Z3_PARTIAL_ORDER,
-    OFTYPE,
     TOP,
     TUPLE,
     VAR,
@@ -62,8 +63,12 @@ from .language import (
     app,
     bool_,
     boool,
+    conj,
     lam,
+    pair,
+    pre_pair,
     semi,
+    simple,
     unit,
 )
 from .metrics import COUNTERS
@@ -189,6 +194,12 @@ def closure_theory() -> Iterator[ExprRef]:
         COMP(APP(V, t), APP(V, t)) == APP(V, t),
         patterns=[APP(V, t)],
         qid="v_comp",
+    )
+    yield ForAll(
+        [t, x],
+        LEQ(APP(t, x), x) == (app(V, t, x) == x),
+        patterns=[MultiPattern(APP(t, x), app(V, t, x))],
+        qid="v_fix",
     )
 
     # TYPE is a type.
@@ -537,10 +548,10 @@ def simple_theory(definition: bool = False) -> Iterator[ExprRef]:
 
 def declare_type(t: ExprRef, inhabs: list[ExprRef], *, qid: str) -> Iterator[ExprRef]:
     # t is a type
-    yield OFTYPE(t, V)
+    yield INHABITS(t, V)
     # t contains all its inhabitants
     for x in inhabs:
-        yield OFTYPE(x, t)
+        yield INHABITS(x, t)
     # t contains only its inhabitants
     yield ForAll([x], Or(*[APP(t, x) == i for i in inhabs]), qid=f"inhab_{qid}")
 
@@ -551,6 +562,18 @@ def types_theory() -> Iterator[ExprRef]:
 
     Note these types are embedded in the untyped lambda calculus.
     """
+    # Definitions of types
+    a, a_, p = z3.Consts("a a_ p", Term)
+    yield semi == simple(a, a_, conj(a_, a))
+    yield boool == simple(a, a_, conj(a_, conj(a_, a)))
+    yield unit == APP(V, JOIN(semi, KI))
+    disambiguate_bool = lam(f, lam(x, lam(y, app(f, app(f, x, TOP), app(f, TOP, y)))))
+    yield bool_ == APP(V, JOIN(boool, disambiguate_bool))
+    yield pre_pair == simple(a, a_, conj(conj(ANY, a_), conj(conj(ANY, a_), a)))
+    disambiguate_pair = lam(p, lam(f, app(f, app(p, K), app(p, KI))))
+    yield pair == APP(V, JOIN(pre_pair, disambiguate_pair))
+
+    # Inhabitants of finite types
     axioms = [
         *declare_type(DIV, [TOP, BOT], qid="div"),
         *declare_type(semi, [TOP, BOT, I], qid="semi"),
@@ -560,6 +583,44 @@ def types_theory() -> Iterator[ExprRef]:
     ]
     logger.info(f"Generated {len(axioms)} type axioms")
     yield from axioms
+
+    # Inhabitants of pre_pair
+    yield INHABITS(pre_pair, V)
+    yield INHABITS(TOP, pre_pair)
+    yield INHABITS(BOT, pre_pair)
+    yield INHABITS(TUPLE(TOP, TOP), pre_pair)
+    yield INHABITS(A, pre_pair)
+    yield ForAll(
+        [x],
+        Implies(LEQ(x, TUPLE(TOP, TOP)), INHABITS(x, pre_pair)),
+        patterns=[LEQ(x, TUPLE(TOP, TOP)), INHABITS(x, pre_pair)],
+        qid="pre_pair_tt",
+    )
+    yield ForAll(
+        [p],
+        Or(app(pre_pair, p) == TOP, LEQ(app(pre_pair, p), TUPLE(TOP, TOP))),
+        patterns=[app(pre_pair, p)],
+        qid="inhab_pre_pair",
+    )
+
+    # Inhabitants of pair
+    yield INHABITS(pair, V)
+    yield INHABITS(TOP, pair)
+    yield ForAll(
+        [x, y],
+        INHABITS(TUPLE(x, y), pair),
+        patterns=[TUPLE(x, y)],
+        qid="pair_xy",
+    )
+    yield ForAll(
+        [p],
+        Or(
+            app(pair, x) == TOP,
+            app(pair, x) == TUPLE(app(p, K), app(p, KI)),
+        ),
+        patterns=[MultiPattern(app(pair, x), app(p, K), app(p, KI))],
+        qid="inhab_pair",
+    )
 
 
 @functools.cache

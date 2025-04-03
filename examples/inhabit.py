@@ -11,7 +11,7 @@ import argparse
 import z3
 
 from hstar.bridge import nf_to_z3
-from hstar.language import OFTYPE, bool_, boool, pair, pre_pair, semi, unit
+from hstar.language import INHABITS, bool_, boool, pair, pre_pair, semi, unit
 from hstar.normal import VAR, Term
 from hstar.synthesis import Synthesizer
 
@@ -36,7 +36,7 @@ def main(args: argparse.Namespace) -> None:
 
     # Constraint: term must be of the specified type
     def constraint(candidate: Term) -> z3.ExprRef:
-        return OFTYPE(nf_to_z3(candidate), target_type)
+        return INHABITS(nf_to_z3(candidate), target_type)
 
     def on_fact(term: Term, valid: bool) -> None:
         if valid:

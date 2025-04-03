@@ -13,10 +13,10 @@ from hstar.language import (
     COMP,
     CONV,
     DIV,
+    INHABITS,
     JOIN,
     KI,
     LEQ,
-    OFTYPE,
     TOP,
     TUPLE,
     VAR,
@@ -228,41 +228,41 @@ def test_simple(solver: z3.Solver, formula: z3.ExprRef) -> None:
 
 TYPE_EXAMPLES = {
     # Any.
-    "ANY : TYPE": OFTYPE(ANY, V),
-    "x : ANY": OFTYPE(x, ANY),
+    "ANY : TYPE": INHABITS(ANY, V),
+    "x : ANY": INHABITS(x, ANY),
     # Div.
-    "div : TYPE": OFTYPE(DIV, V),
-    "TOP : div": OFTYPE(TOP, DIV),
-    "BOT : div": OFTYPE(BOT, DIV),
+    "div : TYPE": INHABITS(DIV, V),
+    "TOP : div": INHABITS(TOP, DIV),
+    "BOT : div": INHABITS(BOT, DIV),
     # Semi.
-    "semi : TYPE": OFTYPE(semi, V),
-    "TOP : semi": OFTYPE(TOP, semi),
-    "BOT : semi": OFTYPE(BOT, semi),
-    "I : semi": OFTYPE(I, semi),
+    "semi : TYPE": INHABITS(semi, V),
+    "TOP : semi": INHABITS(TOP, semi),
+    "BOT : semi": INHABITS(BOT, semi),
+    "I : semi": INHABITS(I, semi),
     # Boool.
-    "boool : TYPE": OFTYPE(boool, V),
-    "TOP : boool": OFTYPE(TOP, boool),
-    "BOT : boool": OFTYPE(BOT, boool),
-    "true : boool": OFTYPE(K, boool),
-    "false : boool": OFTYPE(KI, boool),
-    "JOIN(true, false) : boool": OFTYPE(JOIN(K, KI), boool),
+    "boool : TYPE": INHABITS(boool, V),
+    "TOP : boool": INHABITS(TOP, boool),
+    "BOT : boool": INHABITS(BOT, boool),
+    "true : boool": INHABITS(K, boool),
+    "false : boool": INHABITS(KI, boool),
+    "JOIN(true, false) : boool": INHABITS(JOIN(K, KI), boool),
     # Pre Pair.
-    "pre_pair : TYPE": OFTYPE(pre_pair, V),
-    "<x,y> : pre_pair": OFTYPE(TUPLE(x, y), pre_pair),
+    "pre_pair : TYPE": INHABITS(pre_pair, V),
+    "<x,y> : pre_pair": INHABITS(TUPLE(x, y), pre_pair),
     "x,y:pair ==> x|y:pair": Implies(
-        OFTYPE(TUPLE(x, y), pair), OFTYPE(JOIN(x, y), pair)
+        INHABITS(TUPLE(x, y), pair), INHABITS(JOIN(x, y), pair)
     ),
     # Unit.
-    "unit : TYPE": OFTYPE(unit, V),
-    "TOP : unit": OFTYPE(TOP, unit),
-    "I : unit": OFTYPE(I, unit),
+    "unit : TYPE": INHABITS(unit, V),
+    "TOP : unit": INHABITS(TOP, unit),
+    "I : unit": INHABITS(I, unit),
     # Bool.
-    "bool : TYPE": OFTYPE(bool_, V),
-    "true : bool": OFTYPE(K, bool_),
-    "false : bool": OFTYPE(KI, bool_),
+    "bool : TYPE": INHABITS(bool_, V),
+    "true : bool": INHABITS(K, bool_),
+    "false : bool": INHABITS(KI, bool_),
     # Pair.
-    "pair : TYPE": OFTYPE(pair, V),
-    "<x,y> : pair": OFTYPE(TUPLE(x, y), pair),
+    "pair : TYPE": INHABITS(pair, V),
+    "<x,y> : pair": INHABITS(TUPLE(x, y), pair),
 }
 
 

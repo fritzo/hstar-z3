@@ -221,36 +221,25 @@ def TUPLE(*args: ExprRef) -> ExprRef:
     return lam(var, app(var, *args))
 
 
-def CONJ(a: ExprRef, b: ExprRef) -> ExprRef:
+def conj(a: ExprRef, b: ExprRef) -> ExprRef:
     r"""Conjunction `a -> b = \f. b o f o a`."""
     f = get_fresh(a, b)
-    x = get_fresh(a, b, f)
-    return lam(f, lam(x, app(b, f, a, x)))
+    return lam(f, comp(b, f, a))
 
 
-def simple(a: ExprRef, a1: ExprRef, body: ExprRef) -> ExprRef:
+def simple(a: ExprRef, a_: ExprRef, body: ExprRef) -> ExprRef:
     """Constructor for simple types."""
-    return APP(A, lam(a, lam(a1, body)))
+    return APP(A, lam(a, lam(a_, body)))
 
 
 # Types.
 ANY = I
 semi, unit = z3.Consts("semi unit", Term)
 boool, bool_ = z3.Consts("boool bool", Term)
-pre_pair, disamb_pair, pair = z3.Consts("pre_pair disamb_pair pair", Term)
-
-# TODO
-# semi = simple(lambda a, a1: CONJ(a, a1))
-# boool = simple(lambda a, a1: CONJ(a, CONJ(a, a1)))
-# pre_pair = simple(lambda a, a1: CONJ(CONJ(ANY, a), CONJ(CONJ(ANY, a), a1)))
-# unit = APP(V, JOIN(semi, ABS(I)))
-# disamb_bool = hoas(lambda f, x, y: app(f, app(f, x, TOP), app(f, TOP, y)))
-# bool_ = APP(V, JOIN(boool, disamb_bool))
-# disamb_pair = hoas(lambda p, f: app(f, app(p, K), app(p, KI)))
-# pair = APP(V, JOIN(pre_pair, disamb_pair))
+pre_pair, pair = z3.Consts("pre_pair pair", Term)
 
 
-def OFTYPE(x: ExprRef, t: ExprRef) -> ExprRef:
+def INHABITS(x: ExprRef, t: ExprRef) -> ExprRef:
     """Check if x is of type t."""
     return LEQ(APP(t, x), x)
 
