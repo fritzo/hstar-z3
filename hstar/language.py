@@ -221,10 +221,18 @@ def TUPLE(*args: ExprRef) -> ExprRef:
     return lam(var, app(var, *args))
 
 
-def conj(a: ExprRef, b: ExprRef) -> ExprRef:
-    r"""Conjunction `a -> b = \f. b o f o a`."""
-    f = get_fresh(a, b)
-    return lam(f, comp(b, f, a))
+def conj(*args: ExprRef) -> ExprRef:
+    r"""
+    Conjunction `a -> b = \f. b o f o a`.
+    Associates as a -> b -> c = a -> (b -> c).
+    """
+    assert args
+    args, result = args[:-1], args[-1]
+    while args:
+        args, arg = args[:-1], args[-1]
+        f = get_fresh(arg, result)
+        result = lam(f, comp(result, f, arg))
+    return result
 
 
 def simple(a: ExprRef, a_: ExprRef, body: ExprRef) -> ExprRef:

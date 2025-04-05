@@ -309,6 +309,27 @@ def app(*args: Term) -> Term:
     return result
 
 
+def comp(*args: Term) -> Term:
+    """Chained composition."""
+    result = VAR(0)
+    for arg in reversed(args):
+        result = APP(shift(arg), result)
+    return ABS(result)
+
+
+def conj(*args: Term) -> Term:
+    r"""
+    Conjunction `a -> b = \f. b o f o a`.
+    Associates as a -> b -> c = a -> (b -> c).
+    """
+    assert args
+    args, result = args[:-1], args[-1]
+    while args:
+        args, arg = args[:-1], args[-1]
+        result = ABS(comp(shift(result), VAR(0), shift(arg)))
+    return result
+
+
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class Env(Mapping[int, Term], metaclass=HashConsMeta):
     """An environment mapping variables to terms."""

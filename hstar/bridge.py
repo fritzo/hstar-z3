@@ -161,12 +161,10 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
             return normal.JOIN(z3_to_nf(lhs), z3_to_nf(rhs))
 
         elif decl_name == "COMP":
-            # Handle COMP constructor - we'll convert to a lambda term
-            # COMP(f, g) = λx. f(g(x))
-            f = normal.shift(z3_to_nf(term.arg(0)))
-            g = normal.shift(z3_to_nf(term.arg(1)))
-            f_g_x = normal.APP(f, normal.APP(g, normal.VAR(0)))
-            return normal.ABS(f_g_x)
+            # Handle COMP constructor
+            lhs = term.arg(0)
+            rhs = term.arg(1)
+            return normal.comp(z3_to_nf(lhs), z3_to_nf(rhs))
 
     raise InvalidExpr(f"Unexpected Z3 term: {term}")
 

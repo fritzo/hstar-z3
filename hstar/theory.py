@@ -565,16 +565,21 @@ def types_theory() -> Iterator[ExprRef]:
     Note these types are embedded in the untyped lambda calculus.
     """
     # Definitions of types
-    a, a_, p = z3.Consts("a a_ p", Term)
+    a = VAR(0)
+    a_ = VAR(1)
+    f = VAR(2)
+    p = VAR(3)
+    u = VAR(4)
+    v = VAR(5)
     yield semi == simple(a, a_, conj(a_, a))
     yield boool == simple(a, a_, conj(a_, conj(a_, a)))
     yield unit == APP(V, JOIN(semi, KI))
-    disambiguate_bool = lam(f, lam(x, lam(y, app(f, app(f, x, TOP), app(f, TOP, y)))))
+    disambiguate_bool = lam(f, lam(u, lam(v, app(f, app(f, u, TOP), app(f, TOP, v)))))
     yield bool_ == APP(V, JOIN(boool, disambiguate_bool))
     yield pre_box == simple(a, a_, conj(conj(ANY, a_), a))
     disambiguate_box = lam(a, lam(f, app(f, app(a, I))))
     yield box == APP(V, JOIN(pre_box, disambiguate_box))
-    yield pre_pair == simple(a, a_, conj(conj(ANY, a_), conj(conj(ANY, a_), a)))
+    yield pre_pair == simple(a, a_, conj(conj(ANY, a_), conj(ANY, a_), a))
     disambiguate_pair = lam(p, lam(f, app(f, app(p, K), app(p, KI))))
     yield pair == APP(V, JOIN(pre_pair, disambiguate_pair))
 
@@ -637,9 +642,9 @@ def types_theory() -> Iterator[ExprRef]:
         qid="pre_pair_tt",
     )
     yield ForAll(
-        [p],
-        Or(app(pre_pair, p) == TOP, LEQ(app(pre_pair, p), TUPLE(TOP, TOP))),
-        patterns=[app(pre_pair, p)],
+        [x],
+        Or(app(pre_pair, x) == TOP, LEQ(app(pre_pair, x), TUPLE(TOP, TOP))),
+        patterns=[app(pre_pair, x)],
         qid="inhab_pre_pair",
     )
 
@@ -653,12 +658,12 @@ def types_theory() -> Iterator[ExprRef]:
         qid="pair_xy",
     )
     yield ForAll(
-        [p],
+        [x],
         Or(
             app(pair, x) == TOP,
-            app(pair, x) == TUPLE(app(p, K), app(p, KI)),
+            app(pair, x) == TUPLE(app(x, K), app(x, KI)),
         ),
-        patterns=[MultiPattern(app(pair, x), app(p, K), app(p, KI))],
+        patterns=[MultiPattern(app(pair, x), app(x, K), app(x, KI))],
         qid="inhab_pair",
     )
 
@@ -703,8 +708,8 @@ def get_theory(*, include_all: bool = False) -> tuple[tuple[str, ExprRef], ...]:
     add(lambda_theory)
     add(simple_theory)
     if include_all:
+        add(types_theory)  # TODO enable
         add(extensional_theory)
-        add(types_theory)
 
     counter["axioms"] = max(counter["axioms"], ax_count)
     counter["equations"] = max(counter["equations"], eq_count)
