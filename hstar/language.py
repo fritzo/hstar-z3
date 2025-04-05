@@ -204,6 +204,7 @@ def join(*args: ExprRef) -> ExprRef:
 
 def app(*args: ExprRef) -> ExprRef:
     r"""Apply a list of arguments to a function."""
+    assert args
     result = args[0]
     for arg in args[1:]:
         result = APP(result, arg)
@@ -212,13 +213,12 @@ def app(*args: ExprRef) -> ExprRef:
 
 def comp(*args: ExprRef) -> ExprRef:
     r"""Compose a list of functions."""
-    return COMP(args[0], comp(*args[1:])) if args else I
-
-
-def TUPLE(*args: ExprRef) -> ExprRef:
-    r"""Barendregt tuples `<M1,...,Mn> = \f. f M1 ... Mn`."""
-    var = get_fresh(*args)
-    return lam(var, app(var, *args))
+    if not args:
+        return I
+    result = args[0]
+    for arg in args[1:]:
+        result = COMP(result, arg)
+    return result
 
 
 def conj(*args: ExprRef) -> ExprRef:
@@ -233,6 +233,12 @@ def conj(*args: ExprRef) -> ExprRef:
         f = get_fresh(arg, result)
         result = lam(f, comp(result, f, arg))
     return result
+
+
+def TUPLE(*args: ExprRef) -> ExprRef:
+    r"""Barendregt tuples `<M1,...,Mn> = \f. f M1 ... Mn`."""
+    var = get_fresh(*args)
+    return lam(var, app(var, *args))
 
 
 def simple(a: ExprRef, a_: ExprRef, body: ExprRef) -> ExprRef:
