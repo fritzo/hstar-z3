@@ -63,9 +63,11 @@ from .language import (
     app,
     bool_,
     boool,
+    box,
     conj,
     lam,
     pair,
+    pre_box,
     pre_pair,
     semi,
     simple,
@@ -569,6 +571,9 @@ def types_theory() -> Iterator[ExprRef]:
     yield unit == APP(V, JOIN(semi, KI))
     disambiguate_bool = lam(f, lam(x, lam(y, app(f, app(f, x, TOP), app(f, TOP, y)))))
     yield bool_ == APP(V, JOIN(boool, disambiguate_bool))
+    yield pre_box == simple(a, a_, conj(conj(ANY, a_), a))
+    disambiguate_box = lam(a, lam(f, app(f, app(a, I))))
+    yield box == APP(V, JOIN(pre_box, disambiguate_box))
     yield pre_pair == simple(a, a_, conj(conj(ANY, a_), conj(conj(ANY, a_), a)))
     disambiguate_pair = lam(p, lam(f, app(f, app(p, K), app(p, KI))))
     yield pair == APP(V, JOIN(pre_pair, disambiguate_pair))
@@ -583,6 +588,41 @@ def types_theory() -> Iterator[ExprRef]:
     ]
     logger.info(f"Generated {len(axioms)} type axioms")
     yield from axioms
+
+    # Inhabitants of pre_box
+    yield INHABITS(pre_box, V)
+    yield INHABITS(TOP, pre_box)
+    yield INHABITS(BOT, pre_box)
+    yield INHABITS(TUPLE(TOP), pre_box)
+    yield INHABITS(A, pre_box)
+    yield ForAll(
+        [x],
+        Implies(LEQ(x, TUPLE(TOP)), INHABITS(x, pre_box)),
+        patterns=[LEQ(x, TUPLE(TOP)), INHABITS(x, pre_box)],
+        qid="pre_box_top",
+    )
+    yield ForAll(
+        [x],
+        Or(app(pre_box, x) == TOP, LEQ(app(pre_box, x), TUPLE(TOP))),
+        patterns=[app(pre_box, x)],
+        qid="inhab_pre_box",
+    )
+
+    # Inhabitants of box
+    yield INHABITS(box, V)
+    yield INHABITS(TOP, box)
+    yield ForAll(
+        [x],
+        INHABITS(TUPLE(x), box),
+        patterns=[TUPLE(x)],
+        qid="box_x",
+    )
+    yield ForAll(
+        [x],
+        Or(app(box, x) == TOP, app(box, x) == TUPLE(app(x, I))),
+        patterns=[MultiPattern(app(box, x), app(x, I))],
+        qid="inhab_box",
+    )
 
     # Inhabitants of pre_pair
     yield INHABITS(pre_pair, V)

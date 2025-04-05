@@ -32,8 +32,10 @@ from hstar.language import (
     Y,
     bool_,
     boool,
+    box,
     lam,
     pair,
+    pre_box,
     pre_pair,
     semi,
     unit,
@@ -245,23 +247,47 @@ TYPE_EXAMPLES = {
     "BOT : boool": INHABITS(BOT, boool),
     "true : boool": INHABITS(K, boool),
     "false : boool": INHABITS(KI, boool),
-    "JOIN(true, false) : boool": INHABITS(JOIN(K, KI), boool),
-    # Pre Pair.
-    "pre_pair : TYPE": INHABITS(pre_pair, V),
-    "<x,y> : pre_pair": INHABITS(TUPLE(x, y), pre_pair),
-    "x,y:pair ==> x|y:pair": Implies(
-        INHABITS(TUPLE(x, y), pair), INHABITS(JOIN(x, y), pair)
+    "J : boool": INHABITS(J, boool),
+    "x,y : boool ==> x|y : boool": Implies(
+        And(INHABITS(x, boool), INHABITS(y, boool)),
+        INHABITS(JOIN(x, y), boool),
     ),
     # Unit.
     "unit : TYPE": INHABITS(unit, V),
     "TOP : unit": INHABITS(TOP, unit),
+    "BOT : unit": INHABITS(BOT, unit),
     "I : unit": INHABITS(I, unit),
     # Bool.
     "bool : TYPE": INHABITS(bool_, V),
+    "TOP : bool": INHABITS(TOP, bool_),
+    "BOT : bool": INHABITS(BOT, bool_),
     "true : bool": INHABITS(K, bool_),
     "false : bool": INHABITS(KI, bool_),
+    # Pre Box.
+    "pre_box : TYPE": INHABITS(pre_box, V),
+    "TOP : pre_box": INHABITS(TOP, pre_box),
+    "BOT : pre_box": INHABITS(BOT, pre_box),
+    "<x> : pre_box": INHABITS(TUPLE(x), pre_box),
+    "x,y : pre_box ==> x|y : pre_box": Implies(
+        And(INHABITS(x, pre_box), INHABITS(y, pre_box)),
+        INHABITS(JOIN(x, y), pre_box),
+    ),
+    # Box.
+    "box : TYPE": INHABITS(box, V),
+    "TOP : box": INHABITS(TOP, box),
+    "<x> : box": INHABITS(TUPLE(x), box),
+    # Pre Pair.
+    "pre_pair : TYPE": INHABITS(pre_pair, V),
+    "TOP : pre_pair": INHABITS(TOP, pre_pair),
+    "BOT : pre_pair": INHABITS(BOT, pre_pair),
+    "<x,y> : pre_pair": INHABITS(TUPLE(x, y), pre_pair),
+    "x,y : pre_pair ==> x|y : pre_pair": Implies(
+        And(INHABITS(x, pre_pair), INHABITS(y, pre_pair)),
+        INHABITS(JOIN(x, y), pre_pair),
+    ),
     # Pair.
     "pair : TYPE": INHABITS(pair, V),
+    "TOP : pair": INHABITS(TOP, pair),
     "<x,y> : pair": INHABITS(TUPLE(x, y), pair),
 }
 

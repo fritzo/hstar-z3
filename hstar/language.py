@@ -236,6 +236,7 @@ def simple(a: ExprRef, a_: ExprRef, body: ExprRef) -> ExprRef:
 ANY = I
 semi, unit = z3.Consts("semi unit", Term)
 boool, bool_ = z3.Consts("boool bool", Term)
+pre_box, box = z3.Consts("pre_box box", Term)
 pre_pair, pair = z3.Consts("pre_pair pair", Term)
 
 
