@@ -46,34 +46,10 @@ from functools import cache, lru_cache
 
 from immutables import Map
 
-from hstar.itertools import partitions
-
 from .functools import weak_key_cache
 from .hashcons import HashConsMeta, intern
-
-EMPTY_VARS: Map[int, int] = Map()
-
-
-@cache
-def max_vars(*args: Map[int, int]) -> Map[int, int]:
-    """Element-wise maximum of multiple maps of variables."""
-    if not args:
-        return EMPTY_VARS
-    result = dict(args[0])
-    for arg in args[1:]:
-        for k, v in arg.items():
-            result[k] = max(result.get(k, 0), v)
-    return intern(Map(result))
-
-
-@cache
-def add_vars(*args: Map[int, int]) -> Map[int, int]:
-    """Add multiple maps of variables."""
-    result = dict(args[0])
-    for arg in args[1:]:
-        for k, v in arg.items():
-            result[k] = result.get(k, 0) + v
-    return intern(Map(result))
+from .itertools import partitions
+from .varsets import EMPTY_VARS, add_vars, max_vars
 
 
 class TermType(Enum):
