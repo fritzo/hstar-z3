@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import NewType
 
+import numpy as np
 from immutables import Map
 
 from .hashcons import HashConsMeta, intern
@@ -135,6 +136,13 @@ def can_safely_copy(node: Node) -> bool:
     return False
 
 
+def beta_reduce(body: Node, rhs: Node) -> Node:
+    rhs = shift(rhs, delta=1)
+    result = subst(body, 0, rhs)
+    result = shift(result, delta=-1)
+    return result
+
+
 def APP(lhs: Node, rhs: Node, *, result: Node | None = None) -> Node:
     lhs = find(lhs)
     rhs = find(rhs)
@@ -150,9 +158,7 @@ def APP(lhs: Node, rhs: Node, *, result: Node | None = None) -> Node:
         assert isinstance(head.args, tuple)
         body = head.args[0]
         if _FREE_VARS[body].get(0, 0) <= 1 or can_safely_copy(rhs):
-            rhs = shift(rhs, delta=1)
-            result = subst(body, 0, rhs)
-            return shift(result, delta=-1)
+            return beta_reduce(body, rhs)
     elif head.typ == HeadType.JOIN:
         assert isinstance(head.args, frozenset)
         parts = frozenset(APP(part, rhs) for part in head.args)
@@ -255,7 +261,7 @@ def shift(node: Node, *, start: int = 0, delta: int = 1) -> Node:
     raise TypeError(f"Unknown head type: {head.typ}")
 
 
-def subst(node: Node, i: int, rhs: Node) -> Node:
+def subst(node: Node, i: int, value: Node) -> Node:
     """Substitute a term for a free variable."""
     head = _HEAD[node]
     if head.typ == HeadType.TOP:
@@ -263,22 +269,22 @@ def subst(node: Node, i: int, rhs: Node) -> Node:
     if head.typ == HeadType.VAR:
         assert isinstance(head.args, int)
         if head.args == i:
-            return rhs
+            return value
         return node
     if head.typ == HeadType.ABS:
         assert isinstance(head.args, tuple)
         body = head.args[0]
-        body = subst(body, i + 1, shift(rhs, delta=1))
+        body = subst(body, i + 1, shift(value, delta=1))
         return ABS(body)
     if head.typ == HeadType.APP:
         assert isinstance(head.args, tuple)
         lhs, rhs = head.args
-        lhs = subst(lhs, i, rhs)
-        rhs = subst(rhs, i, rhs)
+        lhs = subst(lhs, i, value)
+        rhs = subst(rhs, i, value)
         return APP(lhs, rhs)
     if head.typ == HeadType.JOIN:
         assert isinstance(head.args, frozenset)
-        parts = frozenset(subst(part, i, rhs) for part in head.args)
+        parts = frozenset(subst(part, i, value) for part in head.args)
         return JOIN(parts)
     raise TypeError(f"Unknown head type: {head.typ}")
 
@@ -343,7 +349,16 @@ def head_union(x: Head, y: Head) -> Head:
         assert isinstance(y.args, tuple)
         arg = union(x.args[0], y.args[0])
         return Head(HeadType.ABS, (arg,))
-    raise NotImplementedError("TODO")
+    if x.typ == HeadType.APP:
+        assert y.typ == HeadType.APP
+        assert isinstance(x.args, tuple)
+        assert isinstance(y.args, tuple)
+        lhs = union(x.args[0], y.args[0])
+        rhs = union(x.args[1], y.args[1])
+        return Head(HeadType.APP, (lhs, rhs))
+    if x.typ == HeadType.JOIN:
+        raise NotImplementedError("TODO: JOIN")
+    raise TypeError(f"Unknown head types: {x.typ}, {y.typ}")
 
 
 def saturate() -> None:
@@ -368,10 +383,62 @@ def saturate_step() -> None:
         ABS(body, result=y)
 
     # Merge application structure.
-    raise NotImplementedError("TODO: APP")
+    for app_key in _APP_INDEX.pop(x, ()):
+        if _APP.get(app_key) == x:
+            del _APP[app_key]
+        lhs, rhs = app_key
+        lhs, rhs = find(lhs), find(rhs)
+        APP(lhs, rhs, result=y)
 
     # Merge join structure.
-    raise NotImplementedError("TODO: JOIN")
+    for join_parts in _JOIN_INDEX.pop(x, ()):
+        if _JOIN.get(join_parts) == x:
+            del _JOIN[join_parts]
+        parts = frozenset(find(part) for part in join_parts)
+        JOIN(parts, result=y)
 
     # Merge head normalization.
     _HEAD[y] = head_union(_HEAD.pop(x), _HEAD[y])
+
+
+# Reduction.
+
+
+def try_reduce_step(node: Node, rng: np.random.Generator) -> bool:
+    """Try to reduce a term."""
+    node = find(node)
+    head = _HEAD[node]
+    if head.typ == HeadType.TOP:
+        return False
+    if head.typ == HeadType.VAR:
+        return False
+    if head.typ == HeadType.ABS:
+        assert isinstance(head.args, tuple)
+        body = head.args[0]
+        return try_reduce_step(body, rng)
+    if head.typ == HeadType.APP:
+        assert isinstance(head.args, tuple)
+        lhs, rhs = head.args
+        # Base case: beta reduction.
+        lhs = find(lhs)
+        lhs_head = _HEAD[lhs]
+        if lhs_head.typ == HeadType.ABS:
+            assert isinstance(lhs_head.args, tuple)
+            body = lhs_head.args[0]
+            rhs = find(rhs)
+            reduced = beta_reduce(body, rhs)
+            union(node, reduced)
+            return True
+        # Otherwise recurse to components.
+        if try_reduce_step(lhs, rng):
+            return True
+        if try_reduce_step(rhs, rng):
+            return True
+        return False
+    if head.typ == HeadType.JOIN:
+        assert isinstance(head.args, frozenset)
+        for part in rng.permutation(sorted(head.args)):
+            if try_reduce_step(part, rng):
+                return True
+        return False
+    raise TypeError(f"Unknown head type: {head.typ}")

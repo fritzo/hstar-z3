@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "immutables",
+    "numpy",
     "tqdm",
     "z3-solver",
 ]

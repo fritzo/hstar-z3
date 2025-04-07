@@ -18,6 +18,7 @@
     "subexpression",
     "sygus",
     "unsat",
-    "unsatisfiability"
+    "unsatisfiability",
+    "varsets"
   ]
 }
