@@ -1,7 +1,7 @@
 """
 # Enumeration algorithms for Syntax-Guided Synthesis (SyGuS).
 
-This module provides algorithms for enumerating linear normal forms,
+This module provides algorithms for enumerating affine normal forms,
 environments thereof, and refinements of term sketches. The enumerators are
 intended for use by synthesis algorithms to explore the space of candidate terms
 satisfying constraints.
@@ -89,7 +89,7 @@ class Enumerator:
     def _add_term(self, term: Term) -> None:
         c = complexity(term)
         if c >= len(self._levels):
-            # Eager linear reduction has produced a more complex term that we
+            # Eager affine reduction has produced a more complex term that we
             # will discard here but reconstruct later.
             return
         self._levels[c].add(term)
@@ -243,7 +243,7 @@ class Refiner:
                 continue
 
             # Note special may be more or less complex than the pair complexity,
-            # due to eager linear reduction and free variable compression.
+            # due to eager affine reduction and free variable compression.
             if special in self._specialize:
                 self._add_edge(general, special)
                 continue

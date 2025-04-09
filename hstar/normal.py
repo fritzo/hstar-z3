@@ -1,13 +1,13 @@
 """
-# Linear-normal-forms for λ-join-calculus.
+# Affine-normal-forms for λ-join-calculus.
 
 Our behavior synthesis search grammar will be a subset of the λ-join-calculus,
-namely those terms that are in a particular linear normal form, i.e. that are
+namely those terms that are in a particular affine normal form, i.e. that are
 simplified wrt a set of rewrite rules.
 
-## Linear Reduction Rules
+## Affine Reduction Rules
 
-The following eager linear reductions are applied during term construction:
+The following eager affine reductions are applied during term construction:
 
 - Join reductions JOIN(...):
   - JOIN(TOP, any) → TOP (TOP absorbs other terms)
@@ -25,14 +25,14 @@ The following eager linear reductions are applied during term construction:
   - APP(ABS(body), arg) → subst(body, [0 ↦ arg]) when:
     - The bound variable occurs at most once in body, or
     - arg is BOT, TOP, or VAR(...). Note it would be safe to widen this
-      condition from can_safely_copy(arg) to is_linear(arg), but that would push
-      many nonlinear terms to higher complexity, as can be measured by
+      condition from can_safely_copy(arg) to is_affine(arg), but that would push
+      many nonaffine terms to higher complexity, as can be measured by
       examples/terms.ipynb.
 
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.
 
-Warning: eager linear reduction may increase term complexity. Hence we need to
+Warning: eager affine reduction may increase term complexity. Hence we need to
 take care when enumerating terms, allowing the complexity of a construction
 `JOIN(...)`, `ABS(...)`, or `APP(...)` to more than the sum of their parts + 1.
 """
@@ -68,7 +68,7 @@ class Precedence(Enum):
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class _Term(metaclass=HashConsMeta):
-    """A join-free linear normal form."""
+    """A join-free affine normal form."""
 
     # Data.
     typ: TermType
@@ -126,7 +126,7 @@ class _Term(metaclass=HashConsMeta):
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class Term(metaclass=HashConsMeta):
-    """A linear normal form."""
+    """A affine normal form."""
 
     # Data.
     parts: frozenset[_Term]
@@ -168,7 +168,7 @@ class Term(metaclass=HashConsMeta):
 def _JOIN(*parts: _Term) -> Term:
     """Join of terms."""
     parts_ = frozenset(parts)
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     if _TOP in parts_ and len(parts_) > 1:
         parts_ = frozenset((_TOP,))
     free_vars = max_vars(*(a.free_vars for a in parts_))
@@ -209,7 +209,7 @@ def VAR(varname: int) -> Term:
 def _ABS(head: _Term) -> _Term:
     """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
     assert head.typ != TermType.TOP, "use ABS instead"
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     if head is _TOP:
         return _TOP
     if head.typ == TermType.APP:
@@ -226,7 +226,7 @@ def _ABS(head: _Term) -> _Term:
 @weak_key_cache
 def ABS(head: Term) -> Term:
     """Lambda abstraction, binding de Bruijn variable `VAR(0)`."""
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     if head is TOP:
         return TOP  # Since \x.TOP = TOP.
     # Construct.
@@ -248,7 +248,7 @@ def can_safely_copy(body: Term) -> bool:
 @weak_key_cache
 def _APP(head: _Term, body: Term) -> Term:
     """Application."""
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     if head is _TOP:
         return TOP
     if head.typ == TermType.ABS:
@@ -480,7 +480,7 @@ def complexity(term: Term) -> int:
     ```
     complexity(JOIN(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
     ```
-    But due to eager linear reduction, this does not satisfy the
+    But due to eager affine reduction, this does not satisfy the
     compositionality conditions
     ```
     complexity(APP(lhs, rhs)) <= 1 + complexity(lhs) + complexity(rhs)
@@ -506,7 +506,7 @@ def subst_complexity(free_vars: Map[int, int], env: Env) -> int:
     Complexity of a substitution.
 
     This accounts for change in complexity due to substituting terms for free
-    variables at multiple locations, but ignores eager linear reduction.
+    variables at multiple locations, but ignores eager affine reduction.
     """
     result = 0
     for k, v in env.items():
@@ -526,8 +526,8 @@ def is_closed(term: Term) -> bool:
 
 
 @weak_key_cache
-def _is_linear(term: _Term) -> bool:
-    """Returns whether a term is linear."""
+def _is_affine(term: _Term) -> bool:
+    """Returns whether a term is affine."""
     if term.typ == TermType.TOP:
         return True
     if term.typ == TermType.VAR:
@@ -536,18 +536,18 @@ def _is_linear(term: _Term) -> bool:
         assert term.head is not None
         if any(v > 1 for v in term.head.free_vars.values()):
             return False
-        return _is_linear(term.head)
+        return _is_affine(term.head)
     if term.typ == TermType.APP:
         assert term.head is not None
         assert term.body is not None
-        return _is_linear(term.head) and is_linear(term.body)
+        return _is_affine(term.head) and is_affine(term.body)
     raise ValueError(f"unexpected term type: {term.typ}")
 
 
 @weak_key_cache
-def is_linear(term: Term) -> bool:
-    """Returns whether a term is linear."""
-    return all(map(_is_linear, term.parts))
+def is_affine(term: Term) -> bool:
+    """Returns whether a term is affine."""
+    return all(map(_is_affine, term.parts))
 
 
 @weak_key_cache
@@ -670,7 +670,7 @@ def leq(lhs: Term, rhs: Term) -> bool | None:
 @weak_key_cache
 def _approximate_lb(term: _Term) -> Term:
     """
-    Approximates a term by replacing nonlinear beta redexes APP(ABS(-),-) with
+    Approximates a term by replacing nonaffine beta redexes APP(ABS(-),-) with
     APP(ABS(-),BOT).
     """
     if term.typ == TermType.TOP:
@@ -702,7 +702,7 @@ def _approximate_lb(term: _Term) -> Term:
 @weak_key_cache
 def _approximate_ub(term: _Term) -> Term:
     """
-    Approximates a term by replacing nonlinear beta redexes APP(ABS(-),-) with
+    Approximates a term by replacing nonaffine beta redexes APP(ABS(-),-) with
     APP(ABS(-),TOP).
     """
     if term.typ == TermType.TOP:
@@ -744,7 +744,7 @@ def approximate_ub(term: Term) -> Term:
 
 
 def approximate(term: Term) -> tuple[Term, Term]:
-    """Produces a linear interval approximation of a term."""
+    """Produces a affine interval approximation of a term."""
     return approximate_lb(term), approximate_ub(term)
 
 

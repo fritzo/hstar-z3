@@ -9,7 +9,7 @@ import argparse
 import random
 
 from hstar.enumeration import enumerator
-from hstar.normal import complexity, is_closed, is_linear
+from hstar.normal import complexity, is_affine, is_closed
 
 
 def main(args: argparse.Namespace) -> None:
@@ -22,9 +22,9 @@ def main(args: argparse.Namespace) -> None:
         # Filter to subsets of terms
         if args.closed and not is_closed(term):
             continue
-        if args.linear and not is_linear(term):
+        if args.affine and not is_affine(term):
             continue
-        if args.nonlinear and is_linear(term):
+        if args.nonaffine and is_affine(term):
             continue
 
         if args.prob >= 1 or random.random() < args.prob:
@@ -47,14 +47,14 @@ parser.add_argument(
 )
 group = parser.add_mutually_exclusive_group()
 group.add_argument(
-    "--linear",
+    "--affine",
     action="store_true",
-    help="Only show linear terms",
+    help="Only show affine terms",
 )
 group.add_argument(
-    "--nonlinear",
+    "--nonaffine",
     action="store_true",
-    help="Only show non-linear terms",
+    help="Only show non-affine terms",
 )
 parser.add_argument(
     "--prob",

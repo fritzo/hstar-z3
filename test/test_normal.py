@@ -172,12 +172,12 @@ def test_abs() -> None:
     assert list(lam_constant.parts)[0].typ == TermType.ABS
 
     # one occurrence
-    lam_linear = ABS(JOIN(VAR(0)))  # \x.x
-    assert list(lam_linear.parts)[0].typ == TermType.ABS
+    lam_affine = ABS(JOIN(VAR(0)))  # \x.x
+    assert list(lam_affine.parts)[0].typ == TermType.ABS
 
     # two or more occurrences
-    lam_nonlinear = ABS(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
-    assert list(lam_nonlinear.parts)[0].typ == TermType.ABS
+    lam_nonaffine = ABS(JOIN(APP(VAR(0), JOIN(VAR(0)))))  # \x.x x
+    assert list(lam_nonaffine.parts)[0].typ == TermType.ABS
 
     # Test that ABS is idempotent with hash consing
     assert ABS(JOIN(VAR(0))) is ABS(JOIN(VAR(0)))
@@ -186,7 +186,7 @@ def test_abs() -> None:
     assert ABS(TOP) is TOP
 
 
-def test_eager_linear_reduction() -> None:
+def test_eager_affine_reduction() -> None:
     # JOIN reduction
     assert JOIN(TOP) is TOP
     assert JOIN(BOT) is BOT
@@ -198,7 +198,7 @@ def test_eager_linear_reduction() -> None:
     assert JOIN(BOT, VAR(0)) is VAR(0)
     assert JOIN(TOP, VAR(0)) is TOP
 
-    # Linear beta reduction
+    # Affine beta reduction
     assert ABS(TOP) is TOP
     assert ABS(BOT) is BOT
     assert APP(ABS(VAR(1)), VAR(1)) is VAR(0)

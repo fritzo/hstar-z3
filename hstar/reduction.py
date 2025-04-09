@@ -1,9 +1,9 @@
 """
-# An engine for memoized shared nonlinear reduction.
+# An engine for memoized shared nonaffine reduction.
 
 This module implements an engine for simultaneously reducing a population of
-terms in an E-graph. Following hstar.normal, we eagerly linearly reduce terms,
-so that the engine need only consider big-steps of nonlinear beta reduction.
+terms in an E-graph. Following hstar.normal, we eagerly affine reduce terms,
+so that the engine need only consider big-steps of nonaffine beta reduction.
 Following Dolstra [1], we implement sharing by hash-consing terms and memoizing
 beta steps from each term.
 
@@ -20,8 +20,8 @@ remains to be seen which paradigm will better scale to populations of programs.
 
 - The language is λ-join-calculus with de Bruijn indices,
   with term constructors {TOP, VAR, ABS, APP, JOIN}.
-  - Term constructors perform eager linear reduction.
-- E-graph nodes are equivalence classes of λ-join-calculus linear normal forms,
+  - Term constructors perform eager affine reduction.
+- E-graph nodes are equivalence classes of λ-join-calculus affine normal forms,
   implemented as integer ids.
 - There is a single global data structure that grows monotonically, and
   includes:
@@ -89,7 +89,7 @@ def ABS(body: Node, *, result: Node | None = None) -> Node:
     if body in _ABS:
         return _ABS[body]
 
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     head = _HEAD[body]
     if head.typ == HeadType.TOP:
         return TOP
@@ -150,7 +150,7 @@ def APP(lhs: Node, rhs: Node, *, result: Node | None = None) -> Node:
     if key in _APP:
         return _APP[key]
 
-    # Eagerly linearly reduce.
+    # Eagerly affine reduce.
     head = _HEAD[lhs]
     if head.typ == HeadType.TOP:
         return TOP
@@ -190,7 +190,7 @@ def JOIN(parts: frozenset[Node], *, result: Node | None = None) -> Node:
     if parts in _JOIN:
         return _JOIN[parts]
 
-    # Eagerly linearly reduce, applying rules for ACI and TOP.
+    # Eagerly affine reduce, applying rules for ACI and TOP.
     parts_in = set(parts)
     parts_out: set[Node] = set()
     while parts_in:

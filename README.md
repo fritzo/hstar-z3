@@ -17,7 +17,7 @@ Closures will allow us to branch on finitely or countably many inhabitants of a 
 
 Our synthesis approach is:
 - Input a program sketch and a set of constraints.
-- Explore a space of linear normal forms refining the sketch.
+- Explore a space of affine normal forms refining the sketch.
 - Narrow down the space of programs by checking constraints, using Z3 to weakly
   check satisfiability.
 - Within the feasible search space, use CEGIS (Counterexample-Guided Inductive
