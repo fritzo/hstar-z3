@@ -1,3 +1,12 @@
+"""
+# Sets of de Bruijn variables.
+
+Free variable sets distinguish only between zero, one, and multiple occurrences
+of a variable. Abstractions over zero or one variables are linear and can be
+eagerly reduced, whereas multiple occurrences would result in copying which
+requires compute budget.
+"""
+
 from functools import cache
 
 from immutables import Map
@@ -40,7 +49,7 @@ def add_vars(*args: Map[int, int]) -> Map[int, int]:
     result = dict(args[0])
     for arg in args[1:]:
         for k, v in arg.items():
-            result[k] = result.get(k, 0) + v
+            result[k] = min(2, result.get(k, 0) + v)
     return intern(Map(result))
 
 
