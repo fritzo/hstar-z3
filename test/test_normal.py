@@ -212,6 +212,13 @@ def test_eager_affine_reduction() -> None:
     # Eta conversion
     assert ABS(APP(VAR(1), VAR(0))) is VAR(0)
 
+    # Right application distributes over join
+    A_Jxy_z = APP(JOIN(VAR(0), VAR(1)), VAR(2))
+    J_Axz_Ayz = JOIN(APP(VAR(0), VAR(2)), APP(VAR(1), VAR(2)))
+    assert A_Jxy_z is J_Axz_Ayz
+    assert APP(TOP, VAR(0)) is TOP
+    assert APP(BOT, VAR(0)) is BOT
+
 
 def test_complexity() -> None:
     """Test that complexity calculation is correct for various terms."""

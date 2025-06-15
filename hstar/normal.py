@@ -29,6 +29,11 @@ The following eager affine reductions are applied during term construction:
       many nonaffine terms to higher complexity, as can be measured by
       examples/terms.ipynb.
 
+- Right application distributes over join APP(JOIN(...), ...):
+  - APP(JOIN(x, y), z) → JOIN(APP(x, z), APP(y, z))
+  - APP(TOP, z) → TOP
+  - APP(BOT, z) → BOT
+
 These rules ensure terms are maintained in a canonical normal form,
 which helps avoid redundant term exploration during synthesis.
 
