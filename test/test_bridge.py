@@ -4,7 +4,16 @@ import pytest
 import z3
 
 from hstar import ast, language, normal
-from hstar.bridge import ast_to_nf, nf_to_z3, z3_to_nf
+from hstar.ast import to_ast
+from hstar.bridge import (
+    ast_to_nf,
+    grid_to_nf,
+    nf_to_ast,
+    nf_to_grid,
+    nf_to_int,
+    nf_to_z3,
+    z3_to_nf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,4 +139,41 @@ AST_NF_IDS = [repr(ast_term) for ast_term, _ in AST_TO_NF_EXAMPLES]
 def test_ast_to_nf(ast_term: ast.Term, nf_term: normal.Term) -> None:
     """Test conversion from ast.Term to normal.Term."""
     result = ast_to_nf(ast_term)
-    assert result == nf_term, f"Expected {nf_term}, but got {result}"
+    assert result == nf_term
+
+
+@pytest.mark.parametrize("ast_term, nf_term", AST_TO_NF_EXAMPLES, ids=AST_NF_IDS)
+def test_nf_to_ast(nf_term: normal.Term, ast_term: ast.Term) -> None:
+    """Test conversion from normal.Term to ast.Term."""
+    actual_ast = nf_to_ast(nf_term)
+    actual_nf = ast_to_nf(actual_ast)
+    assert actual_nf == nf_term  # weaker than assert actual_ast == ast_term
+
+
+@pytest.mark.parametrize("n", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+def test_nf_to_int(n: int) -> None:
+    """Test conversion from normal.Term to int."""
+    nf = ast_to_nf(to_ast(n))
+    assert nf_to_int(nf) == n
+
+
+EXAMPLE_GRIDS = [
+    [[0]],
+    [[1]],
+    [[2, 3]],
+    [[4], [5], [6]],
+    [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+    ],
+]
+
+
+@pytest.mark.parametrize("grid", EXAMPLE_GRIDS)
+def test_grid_to_nf(grid: list[list[int]]) -> None:
+    """Test conversion from grid to normal.Term."""
+    nf = grid_to_nf(grid)
+    assert not nf.free_vars
+    grid2 = nf_to_grid(nf)
+    assert grid2 == grid

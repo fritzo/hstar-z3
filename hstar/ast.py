@@ -5,7 +5,9 @@
 import enum
 import inspect
 import types
+from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import cache, singledispatch
 from typing import Any, Optional
 
 from .hashcons import HashConsMeta
@@ -213,6 +215,7 @@ def _fresh_to_var(term: Term, fresh_varname: int, depth: int = 0) -> Term:
     raise TypeError(f"Unknown term type: {term.type}")
 
 
+@singledispatch
 def to_ast(pythonic: Any) -> Term:
     """Convert a Python object to a Term in our AST using HOAS approach.
 
@@ -220,23 +223,76 @@ def to_ast(pythonic: Any) -> Term:
     - Term objects directly
     - Lambda functions -> ABS using Higher-Order Abstract Syntax
     """
-    # Handle ground Term objects
-    if isinstance(pythonic, Term):
-        return pythonic
-
-    # Handle lambdas using HOAS approach
-    if isinstance(pythonic, types.FunctionType):
-        # Apply fresh variables to the function
-        sig = inspect.signature(pythonic)
-        num_args = len(sig.parameters)
-        fresh_vars = [_FRESH() for _ in range(num_args)]
-        result = to_ast(pythonic(*fresh_vars))
-        # Create lambda abstractions for each argument, from right to left
-        for fresh in reversed(fresh_vars):
-            assert fresh.varname is not None
-            result = shift(result)
-            result = _fresh_to_var(result, fresh.varname)
-            result = ABS(result)
-        return result
-
     raise TypeError(f"Unsupported Python object type: {type(pythonic)}")
+
+
+@to_ast.register
+def _(pythonic: Term) -> Term:
+    """Handle Term objects directly."""
+    return pythonic
+
+
+@to_ast.register(types.FunctionType)
+def _(pythonic: types.FunctionType) -> Term:
+    """Handle lambdas using HOAS approach."""
+    # Apply fresh variables to the function
+    sig = inspect.signature(pythonic)
+    num_args = len(sig.parameters)
+    fresh_vars = [_FRESH() for _ in range(num_args)]
+    result = to_ast(pythonic(*fresh_vars))
+    # Create lambda abstractions for each argument, from right to left
+    for fresh in reversed(fresh_vars):
+        assert fresh.varname is not None
+        result = shift(result)
+        result = _fresh_to_var(result, fresh.varname)
+        result = ABS(result)
+    return result
+
+
+# Tuples.
+
+
+def TUPLE(*args: Any) -> Term:
+    """Barendregt encoding of tuples."""
+    result = VAR(0)
+    for arg in args:
+        result = APP(result, shift(to_ast(arg)))
+    return ABS(result)
+
+
+def select(size: int, index: int) -> Term:
+    """Returns a zero-based tuple selector."""
+    result = VAR(size - index - 1)
+    for _ in range(size):
+        result = ABS(result)
+    return result
+
+
+@to_ast.register(tuple)
+@to_ast.register(list)
+def _(pythonic: Iterable[Any]) -> Term:
+    """Convert a tuple or list to a Term."""
+    return TUPLE(*(to_ast(arg) for arg in pythonic))
+
+
+# Numerals: mu x. 1 + x.
+
+
+def zero() -> Term:
+    """Barendregt encoding of zero."""
+    return ABS(ABS(VAR(1)))
+
+
+def succ(term: Term) -> Term:
+    """Barendregt encoding of the successor function."""
+    return ABS(ABS(APP(VAR(0), term)))
+
+
+@to_ast.register(int)
+@cache
+def _(pythonic: int) -> Term:
+    """Convert an integer to a Term."""
+    if pythonic == 0:
+        return zero()
+    else:
+        return succ(to_ast(pythonic - 1))

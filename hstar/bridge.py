@@ -1,14 +1,15 @@
 """
-# Bridge between λ-join-calculus terms and Z3 terms.
+# Bridge between λ-join-calculus terms in various representations.
 
 This module provides conversion functions between the term representations in
 normal.py (Python objects) and the Z3 terms in solvers.py (symbolic expressions).
 """
 
+from functools import lru_cache
+
 import z3
 
-from hstar import ast, language, normal
-
+from . import ast, language, normal
 from .functools import weak_key_cache
 
 
@@ -169,6 +170,7 @@ def z3_to_nf(term: z3.ExprRef) -> normal.Term:
     raise InvalidExpr(f"Unexpected Z3 term: {term}")
 
 
+@lru_cache
 def ast_to_nf(term: ast.Term) -> normal.Term:
     """
     Convert an ast.Term to a normal.Term.
@@ -238,3 +240,103 @@ def ast_to_z3(term: ast.Term) -> z3.ExprRef:
         A Z3 term expression
     """
     return nf_to_z3(ast_to_nf(term))
+
+
+@lru_cache
+def nf_to_ast(term: normal.Term) -> ast.Term:
+    """
+    Convert a normal.Term to an ast.Term.
+
+    Args:
+        term: A normal.Term instance
+
+    Returns:
+        An ast.Term instance
+    """
+    # Handle BOT (empty parts)
+    if not term.parts:
+        return ast.BOT
+
+    # Handle single-part terms
+    if len(term.parts) == 1:
+        part = next(iter(term.parts))
+        return _nf_to_ast(part)
+
+    # Handle multi-part terms (JOIN)
+    parts = sorted(term.parts)
+    result = ast.JOIN(_nf_to_ast(parts[0]), _nf_to_ast(parts[1]))
+    for part in parts[2:]:
+        result = ast.JOIN(result, _nf_to_ast(part))
+    return result
+
+
+def _nf_to_ast(part: normal._Term) -> ast.Term:
+    """Convert a single normal._Term to an ast.Term."""
+    if part.typ == normal.TermType.TOP:
+        return ast.TOP
+
+    elif part.typ == normal.TermType.VAR:
+        return ast.VAR(part.varname)
+
+    elif part.typ == normal.TermType.ABS:
+        assert part.head is not None
+        body = _nf_to_ast(part.head)
+        return ast.ABS(body)
+
+    elif part.typ == normal.TermType.APP:
+        assert part.head is not None
+        assert part.body is not None
+        lhs = _nf_to_ast(part.head)
+        rhs = nf_to_ast(part.body)  # part.body is a normal.Term not a _Term
+        return ast.APP(lhs, rhs)
+
+    raise ValueError(f"Unexpected term type: {part.typ}")
+
+
+def grid_to_ast(grid: list[list[int]]) -> ast.Term:
+    """Convert a rectangular grid of numbers to a Term (n_rows, n_cols, grid)."""
+    n_rows = len(grid)
+    n_cols = len(grid[0])
+    assert all(len(row) == n_cols for row in grid)
+    return ast.TUPLE(n_rows, n_cols, grid)
+
+
+def nf_to_int(term: normal.Term) -> int:
+    assert not term.free_vars
+    TOP = normal.TOP
+    BOT = normal.BOT
+    I = normal.ABS(normal.VAR(0))
+    app = normal.app
+    if app(term, TOP, BOT) == TOP:
+        return 0
+    if app(term, BOT, TOP) == TOP:
+        return 1 + nf_to_int(app(term, TOP, I))
+    raise ValueError(f"Unexpected term: {term}")
+
+
+def nf_to_list_int(size: int, term: normal.Term) -> list[int]:
+    APP = normal.APP
+    return [nf_to_int(APP(term, ast_to_nf(ast.select(size, i)))) for i in range(size)]
+
+
+def nf_to_list_list_int(n_rows: int, n_cols: int, term: normal.Term) -> list[list[int]]:
+    APP = normal.APP
+
+    def select(i: int) -> normal.Term:
+        return ast_to_nf(ast.select(n_rows, i))
+
+    return [nf_to_list_int(n_cols, APP(term, select(i))) for i in range(n_rows)]
+
+
+def nf_to_grid(term: normal.Term) -> list[list[int]]:
+    """Convert a Term (n_rows, n_cols, grid) to a rectangular grid of numbers."""
+    APP = normal.APP
+    n_rows = nf_to_int(APP(term, ast_to_nf(ast.select(3, 0))))
+    n_cols = nf_to_int(APP(term, ast_to_nf(ast.select(3, 1))))
+    data = APP(term, ast_to_nf(ast.select(3, 2)))
+    return nf_to_list_list_int(n_rows, n_cols, data)
+
+
+def grid_to_nf(grid: list[list[int]]) -> normal.Term:
+    """Convert a rectangular grid of numbers to a Term (n_rows, n_cols, grid)."""
+    return ast_to_nf(grid_to_ast(grid))
